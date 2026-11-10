@@ -65,6 +65,13 @@ dosyasına bakın.
 Oturumlar istemciden bağımsız olarak hub'da yaşar. İstemci yeniden başlasa da oturum sürer.
 `/mcp__tapscout__test_app` prompt'u önerilen test döngüsünü başlatır.
 
+Bir aracı elle çağırmak için (görüntüler `--out` klasörüne kaydedilir):
+
+```bash
+node packages/hub/dist/call.js --list
+node packages/hub/dist/call.js device_screenshot '{"annotate":"elements"}' --out shots
+```
+
 ## MCP araçları
 
 | Grup | Araçlar |
@@ -130,6 +137,20 @@ Bir eylemden sonra ref'ler eski kalırsa hub elementi yeni ağaçta kimliğine g
 - Appium oturumu çökerse runner, uygulama verisini koruyarak yeni bir oturum açar ve komutu yeniden
   dener.
 
+## Platform notları
+
+- **Kare yakalama:** Android'de `screenrecord`, iOS'ta `simctl io recordVideo` videosu ffmpeg
+  (`ffmpeg-static`) ile karelere ayrılır. Kare sırası ve aralıkları kesindir. Eyleme göre konum
+  yaklaşık ±0,5 sn sapabilir; araç eylemin ne zaman bittiğini de bildirir. Video yoksa iOS'ta WDA
+  MJPEG akışı, Android'de ekran görüntüsü yoklaması kullanılır.
+- **iOS'ta yazma:** XCTest klavyede olmayan karakterlerde ("ş", emoji) takılır. Bu yüzden ASCII
+  dışı metin panoya konup ⌘V ile yapıştırılır.
+- **iOS'ta klavyeyi kapatma:** Genel bir yöntem yok. Sürücü, klavyenin done/return tuşları ve
+  Return denenir. Hiçbiri olmazsa araç klavyenin hâlâ açık olduğunu söyler; uygulamada başka
+  hiçbir yere dokunulmaz.
+- **iOS logları:** Uygulamanın kendi kayıtları her düzeyde gelir; Apple çerçevelerinden yalnızca
+  error/fault kayıtları alınır. XCTest'in erişilebilirlik sorguları süzülür.
+
 ## Sınırlar
 
 - iOS yalnızca **iOS Simulator**'da çalışır (`xcodebuild -sdk iphonesimulator` ile üretilmiş
@@ -155,6 +176,17 @@ Bir eylemden sonra ref'ler eski kalırsa hub elementi yeni ağaçta kimliğine g
   "klavye Continue'yu kapatıyor" hatası görüldü. Appium bir kez "socket hang up" ile düştü;
   runner uygulama verisini koruyarak oturumu yeniden açtı. `session_stop` sonrası loglar geldi ve
   job **success** ile bitti. Public job logunda yazılan metin, token veya tünel adresi yok.
+- **GitHub Actions iOS (iPhone 17, iOS 26.5 Simulator, macos-26):** Runner bağlandı ve 11 MB'lık
+  build'i indirdi. XCUITest/WDA ile oturum açılışı yaklaşık 9 dk sürdü. Ekran, UI ağacı (klavye
+  altında kalan Continue `UNDER-KEYBOARD` olarak işaretlendi), Türkçe ve emoji yazma (yapıştırma
+  ile), klavyeyi kapatma, `simctl` videosuyla kare yakalama (iOS itme animasyonu kare kare
+  görüldü), MP4 kayıt, loglar, çökme sorgusu, `app_restart`, canlı tampon ve durdurma çalıştı.
+  Job **success** ile bitti. Doğrulama sırasında bulunup düzeltilenler: bundle id'nin
+  Info.plist'ten okunması, ASCII dışı yazma, klavye kapatma, `simctl list` bayrak sırası, ilk UI
+  ağacı okumasının ısıtılması, kayıt başlangıcının beklenmesi, XCTest log gürültüsü.
+- **Son tur (aynı kodla iki platform):** Android ve iOS oturumları paralel açıldı. Kare
+  yakalamada ilk görünür değişiklik her iki platformda da eylemden sonra geldi; iki job da
+  **success** ile bitti.
 
 ## Geliştirme
 
