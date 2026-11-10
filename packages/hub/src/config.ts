@@ -77,7 +77,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): HubConfig {
     defaultMaxMinutes: num(env.TAPSCOUT_MAX_MINUTES, 60),
     viewLongEdge: num(env.TAPSCOUT_VIEW_LONG_EDGE, DEFAULT_VIEW_LONG_EDGE),
     stream: {
-      backgroundFps: num(env.TAPSCOUT_BACKGROUND_FPS, 2),
+      backgroundFps: num(env.TAPSCOUT_BACKGROUND_FPS, 1),
       viewerFps: num(env.TAPSCOUT_VIEWER_FPS, 6),
       maxEdge: num(env.TAPSCOUT_STREAM_MAX_EDGE, 720),
       quality: num(env.TAPSCOUT_STREAM_QUALITY, 60),

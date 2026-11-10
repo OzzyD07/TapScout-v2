@@ -449,7 +449,8 @@ export class DeviceSession {
       const file = join(this.deps.outDir, name);
       if (this.info.platform === "android") {
         const rec = new AndroidScreenRecord(`rec-${Date.now()}`);
-        rec.start(a.maxSeconds ?? 180);
+        // 2.5 Mbit/s keeps a full 180 s recording (~56 MB) under tunnel request limits.
+        rec.start(a.maxSeconds ?? 180, 2_500_000);
         this.recorder = rec;
       } else {
         if (!this.deps.udid)

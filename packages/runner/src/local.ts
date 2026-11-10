@@ -86,7 +86,8 @@ export async function ensureAndroidDevice(
     if (!attached.includes(serial)) throw new Error(`device ${serial} is not attached`);
     return serial;
   }
-  if (attached.length > 0 && !avd) return attached[0] as string;
+  // A running device wins over booting another one (the AVD name is only a fallback).
+  if (attached.length > 0) return attached[0] as string;
   if (!avd) throw new Error("no Android device is attached; start an emulator or pass an AVD name");
   log(`booting AVD ${avd}`);
   const before = new Set(attached);
