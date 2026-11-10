@@ -71,6 +71,17 @@ export async function applyEnvironment(ctx: EnvContext, args: EnvArgs): Promise<
       results.push({ setting, ok: false, message: message ?? "failed" });
     }
   };
+  // simctl/adb settings run in parallel (on a CI simulator appearance takes ~14 s and a push
+  // ~19 s: one after another they overran the tool time limit); the ones that go through the
+  // driver (relaunch for a language, biometrics) follow one at a time.
+  const now: Promise<void>[] = [];
+  const later: (() => Promise<void>)[] = [];
+  const queueNow = (setting: keyof EnvArgs, fn: () => Promise<string>) => {
+    now.push(run(setting, fn));
+  };
+  const queueLater = (setting: keyof EnvArgs, fn: () => Promise<string>) => {
+    later.push(() => run(setting, fn));
+  };
   const udid = () => {
     if (!ctx.udid) throw new Error("the simulator UDID is unknown");
     return ctx.udid;
@@ -78,7 +89,7 @@ export async function applyEnvironment(ctx: EnvContext, args: EnvArgs): Promise<
   const appId = ctx.info.appId;
 
   if (args.appearance) {
-    await run("appearance", async () => {
+    queueNow("appearance", async () => {
       if (ios) await simctl(["ui", udid(), "appearance", args.appearance as string]);
       else
         await adb(["shell", "cmd", "uimode", "night", args.appearance === "dark" ? "yes" : "no"]);
@@ -87,7 +98,7 @@ export async function applyEnvironment(ctx: EnvContext, args: EnvArgs): Promise<
   }
 
   if (args.fontScale !== undefined) {
-    await run("fontScale", async () => {
+    queueNow("fontScale", async () => {
       const scale = Math.max(0.8, Math.min(args.fontScale as number, 3.1));
       if (ios) {
         const size = iosContentSize(scale);
@@ -101,7 +112,7 @@ export async function applyEnvironment(ctx: EnvContext, args: EnvArgs): Promise<
   }
 
   if (args.locale !== undefined) {
-    await run("locale", async () => {
+    queueLater("locale", async () => {
       const tag = args.locale?.trim() ?? "";
       if (ios) {
         // Per-app language through launch arguments: the app is relaunched with them, now and
@@ -123,7 +134,7 @@ export async function applyEnvironment(ctx: EnvContext, args: EnvArgs): Promise<
   }
 
   if (args.location) {
-    await run("location", async () => {
+    queueNow("location", async () => {
       const { latitude, longitude, altitude } = args.location as NonNullable<EnvArgs["location"]>;
       if (ios) {
         await simctl(["location", udid(), "set", `${latitude},${longitude}`]);
@@ -148,7 +159,7 @@ export async function applyEnvironment(ctx: EnvContext, args: EnvArgs): Promise<
   }
 
   if (args.network) {
-    await run("network", async () => {
+    queueNow("network", async () => {
       if (ios) {
         throw new Error(
           "the iOS Simulator uses the Mac's network and has no per-device offline switch; test offline behaviour on Android",
@@ -166,7 +177,7 @@ export async function applyEnvironment(ctx: EnvContext, args: EnvArgs): Promise<
   }
 
   if (args.push) {
-    await run("push", async () => {
+    queueNow("push", async () => {
       if (!ios) {
         throw new Error(
           "Android pushes arrive through FCM from the app's own server; send one from your backend or the Firebase console while the session runs",
@@ -189,7 +200,7 @@ export async function applyEnvironment(ctx: EnvContext, args: EnvArgs): Promise<
   }
 
   if (args.biometric) {
-    await run("biometric", async () => {
+    queueLater("biometric", async () => {
       const b = args.biometric as NonNullable<EnvArgs["biometric"]>;
       if (ios) {
         if (b === "enroll") {
@@ -227,7 +238,7 @@ export async function applyEnvironment(ctx: EnvContext, args: EnvArgs): Promise<
   }
 
   if (args.media) {
-    await run("media", async () => {
+    queueNow("media", async () => {
       const m = args.media as NonNullable<EnvArgs["media"]>;
       const name = basename(m.fileName).replace(/[^\w.-]/g, "_");
       const dir = join(ctx.outDir, "media");
@@ -266,5 +277,17 @@ export async function applyEnvironment(ctx: EnvContext, args: EnvArgs): Promise<
     });
   }
 
-  return results;
+  await Promise.all(now);
+  for (const fn of later) await fn();
+  const order: (keyof EnvArgs)[] = [
+    "appearance",
+    "fontScale",
+    "locale",
+    "location",
+    "network",
+    "push",
+    "biometric",
+    "media",
+  ];
+  return results.sort((a, b) => order.indexOf(a.setting) - order.indexOf(b.setting));
 }

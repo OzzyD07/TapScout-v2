@@ -163,7 +163,17 @@ export class DeviceOps {
       const kb = await this.command("keyboard", { action: "status" }).catch(() => null);
       tree.keyboardVisible = kb?.data.shown ?? false;
     }
-    if (tree.widthPx && tree.heightPx) this.s.refreshTransform(tree.widthPx, tree.heightPx);
+    // The hierarchy root is the window, which can be smaller than the display (Android Settings
+    // without system bars: 1313×2766 on a 1313×2846 screen). Only a flipped orientation is taken
+    // from it; sizes always come from screenshots.
+    const t = this.s.transform;
+    if (t && tree.widthPx && tree.heightPx) {
+      const treeLandscape = tree.widthPx > tree.heightPx;
+      const viewLandscape = t.screenshotWidth > t.screenshotHeight;
+      if (treeLandscape !== viewLandscape) {
+        this.s.refreshTransform(t.screenshotHeight, t.screenshotWidth);
+      }
+    }
     this.s.lastTree = { tree, capturedAt: out.data.capturedAt, seq: this.s.actionSeq };
     return tree;
   }

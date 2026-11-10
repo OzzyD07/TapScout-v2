@@ -81,6 +81,7 @@ node packages/hub/dist/call.js device_screenshot '{"annotate":"elements"}' --out
 | Dokunma | `device_tap` (tek veya çift; `alert:<düğme>` ile diyalog yanıtı), `device_long_press`, `device_swipe`, `device_drag`, `device_scroll`, `device_pinch` |
 | Metin | `device_type` (append veya replace, submit, secret), `device_key` (Android tuşları; iOS'ta temel tuşlar), `device_keyboard` (status veya hide) |
 | Uygulama | `app_restart` (veri silmeyle ya da silmeden), `app_control` (launch, terminate, background, state, open_url, clear_data), `device_rotate`, `device_wait` (idle, text, text_gone) |
+| Ortam | `device_environment`: koyu/açık mod, uygulama dili, yazı boyutu, GPS konumu, internetsiz mod, push bildirimi, Face ID / parmak izi, galeriye fotoğraf veya video |
 | Zaman | `device_capture_frames` (bir eylem etrafında zaman damgalı kareler; kontak sayfası), `device_recent_frames` (canlı tampon), `device_recording` (MP4) |
 | Kanıt | `device_logs`, `device_crashes`, `evidence_capture`, `finding_record` |
 
@@ -138,6 +139,24 @@ Bir eylemden sonra ref'ler eski kalırsa hub elementi yeni ağaçta kimliğine g
   dener.
 
 ## Platform notları
+
+- **Cihaz ortamı (`device_environment`):** Her ayar ayrı uygulanır ve sonucu ayrı bildirilir.
+
+  | Ayar | Android | iOS Simulator |
+  |---|---|---|
+  | Koyu mod | `cmd uimode night` | `simctl ui appearance` |
+  | Dil (yalnızca uygulama) | `cmd locale set-app-locales` (Android 13+) | uygulama `-AppleLanguages` / `-AppleLocale` ile yeniden açılır |
+  | Yazı boyutu | `font_scale` 0,85–2,0 | en yakın içerik boyutu kategorisi |
+  | Konum | `emu geo fix` | `simctl location set` |
+  | İnternetsiz | uçak modu | yok: Simulator Mac'in ağını kullanır |
+  | Push | yok: FCM uygulamanın sunucusundan gelir | `simctl push` |
+  | Biyometrik | `enroll` PIN (1234) atar ve kayıt ekranını açar; `match` ve `no_match` sensöre dokunur | `enrollBiometric`, `sendBiometricMatch` |
+  | Medya | `/sdcard/Pictures` veya `Movies` + medya taraması | `simctl addmedia` |
+
+  Dil ya da yazı boyutunu yalnızca açılışta okuyan uygulamalar için `restart_app: true` verilir.
+  Değiştirilen ayarlar oturum durumunda ve raporda görünür. Yerel emülatörde ayarlar oturum
+  bitince kalır; geri almak için aynı araç kullanılır. Android'de `enroll` ile atanan PIN de
+  kalır.
 
 - **Kare yakalama:** Android'de `screenrecord`, iOS'ta `simctl io recordVideo` videosu ffmpeg
   (`ffmpeg-static`) ile karelere ayrılır. Kare sırası ve aralıkları kesindir. Eyleme göre konum
