@@ -146,14 +146,17 @@ Bir eylemden sonra ref'ler eski kalırsa hub elementi yeni ağaçta kimliğine g
   |---|---|---|
   | Koyu mod | `cmd uimode night` | `simctl ui appearance` |
   | Dil (yalnızca uygulama) | `cmd locale set-app-locales` (Android 13+) | uygulama `-AppleLanguages` / `-AppleLocale` ile yeniden açılır |
-  | Yazı boyutu | `font_scale` 0,85–2,0 | en yakın içerik boyutu kategorisi |
+  | Yazı boyutu | `font_scale` 0,85–2,0 | uygulama en yakın içerik boyutu kategorisiyle (`-UIPreferredContentSizeCategoryName`) yeniden açılır |
   | Konum | `emu geo fix` | `simctl location set` |
   | İnternetsiz | uçak modu | yok: Simulator Mac'in ağını kullanır |
   | Push | yok: FCM uygulamanın sunucusundan gelir | `simctl push` |
   | Biyometrik | `enroll` PIN (1234) atar ve kayıt ekranını açar; `match` ve `no_match` sensöre dokunur | `enrollBiometric`, `sendBiometricMatch` |
   | Medya | `/sdcard/Pictures` veya `Movies` + medya taraması | `simctl addmedia` |
 
-  Dil ya da yazı boyutunu yalnızca açılışta okuyan uygulamalar için `restart_app: true` verilir.
+  GitHub'daki iOS Simulator'da tek bir ayar 5–20 sn sürebilir. Bu yüzden ayarlar tek tek
+  uygulanır; bir çağrının 60 sn sınırı içinde kalmayacak olanlar "henüz uygulanmadı" diye
+  listelenir ve ajan onları tekrar gönderir. Dil ya da yazı boyutunu yalnızca açılışta okuyan
+  uygulamalar için `restart_app: true` verilir.
   Değiştirilen ayarlar oturum durumunda ve raporda görünür. Yerel emülatörde ayarlar oturum
   bitince kalır; geri almak için aynı araç kullanılır. Android'de `enroll` ile atanan PIN de
   kalır.

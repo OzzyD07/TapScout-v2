@@ -911,15 +911,23 @@ export function createMcpServer(manager: SessionManager, uiUrl: string): McpServ
       const started = Date.now();
       const results: CommandResult<"env">["results"] = [];
       const pending: string[] = [];
+      let blocked = false;
       for (const key of ORDER) {
         if (!(key in args)) continue;
-        if (Date.now() - started > 30_000) {
+        if (blocked || Date.now() - started > 30_000) {
           pending.push(key);
           continue;
         }
         const one = { [key]: args[key] } as CommandArgs<"env">;
-        const r = await ops.act("env", one, 45_000);
-        results.push(...r.data.results);
+        try {
+          const r = await ops.act("env", one, 40_000);
+          results.push(...r.data.results);
+        } catch (error) {
+          // A setting that hangs keeps the device busy: report it and send nothing more now.
+          results.push({ setting: key, ok: false, message: (error as Error).message });
+          blocked = error instanceof SessionError && error.code === "timeout";
+          if (!blocked) throw error;
+        }
       }
       const out = { data: { results } };
       const env = { ...(s.record.environment ?? {}) };

@@ -17,28 +17,32 @@ export interface EnvContext {
   outDir: string;
 }
 
-/** iOS content size categories and the text scale each roughly stands for. */
-const IOS_SIZES: [number, string][] = [
-  [0.8, "extra-small"],
-  [0.88, "small"],
-  [0.94, "medium"],
-  [1.0, "large"],
-  [1.12, "extra-large"],
-  [1.24, "extra-extra-large"],
-  [1.35, "extra-extra-extra-large"],
-  [1.65, "accessibility-medium"],
-  [2.0, "accessibility-large"],
-  [2.4, "accessibility-extra-large"],
-  [2.8, "accessibility-extra-extra-large"],
-  [3.1, "accessibility-extra-extra-extra-large"],
+/** iOS content size categories, the text scale each roughly stands for, and UIKit's raw value. */
+const IOS_SIZES: [number, string, string][] = [
+  [0.8, "extra-small", "UICTContentSizeCategoryXS"],
+  [0.88, "small", "UICTContentSizeCategoryS"],
+  [0.94, "medium", "UICTContentSizeCategoryM"],
+  [1.0, "large", "UICTContentSizeCategoryL"],
+  [1.12, "extra-large", "UICTContentSizeCategoryXL"],
+  [1.24, "extra-extra-large", "UICTContentSizeCategoryXXL"],
+  [1.35, "extra-extra-extra-large", "UICTContentSizeCategoryXXXL"],
+  [1.65, "accessibility-medium", "UICTContentSizeCategoryAccessibilityM"],
+  [2.0, "accessibility-large", "UICTContentSizeCategoryAccessibilityL"],
+  [2.4, "accessibility-extra-large", "UICTContentSizeCategoryAccessibilityXL"],
+  [2.8, "accessibility-extra-extra-large", "UICTContentSizeCategoryAccessibilityXXL"],
+  [3.1, "accessibility-extra-extra-extra-large", "UICTContentSizeCategoryAccessibilityXXXL"],
 ];
 
-export function iosContentSize(scale: number): string {
-  let best = IOS_SIZES[3] as [number, string];
+function nearestSize(scale: number): [number, string, string] {
+  let best = IOS_SIZES[3] as [number, string, string];
   for (const entry of IOS_SIZES) {
     if (Math.abs(entry[0] - scale) < Math.abs(best[0] - scale)) best = entry;
   }
-  return best[1];
+  return best;
+}
+
+export function iosContentSize(scale: number): string {
+  return nearestSize(scale)[1];
 }
 
 /** "tr-TR" → AppleLanguages "(tr)" and AppleLocale "tr_TR"; "zh-Hans-CN" → "(zh-Hans)", "zh_CN". */
@@ -90,7 +94,8 @@ export async function applyEnvironment(ctx: EnvContext, args: EnvArgs): Promise<
 
   if (args.appearance) {
     queueNow("appearance", async () => {
-      if (ios) await simctl(["ui", udid(), "appearance", args.appearance as string]);
+      // Slow on CI simulators (14–23 s), so it gets its own longer limit.
+      if (ios) await simctl(["ui", udid(), "appearance", args.appearance as string], 40_000);
       else
         await adb(["shell", "cmd", "uimode", "night", args.appearance === "dark" ? "yes" : "no"]);
       return `${args.appearance} mode`;
@@ -98,12 +103,20 @@ export async function applyEnvironment(ctx: EnvContext, args: EnvArgs): Promise<
   }
 
   if (args.fontScale !== undefined) {
-    queueNow("fontScale", async () => {
-      const scale = Math.max(0.8, Math.min(args.fontScale as number, 3.1));
+    const scale = Math.max(0.8, Math.min(args.fontScale as number, 3.1));
+    // iOS: per-app through a launch argument and a relaunch. `simctl ui content_size` hung
+    // on a GitHub simulator and blocked every later simctl call (run of session 36983730).
+    const queue = ios ? queueLater : queueNow;
+    queue("fontScale", async () => {
       if (ios) {
-        const size = iosContentSize(scale);
-        await simctl(["ui", udid(), "content_size", size]);
-        return `content size category ${size}`;
+        const [, name, raw] = nearestSize(scale);
+        ctx.device.setIosLaunchArguments(
+          "contentSize",
+          scale === 1 ? [] : ["-UIPreferredContentSizeCategoryName", raw],
+        );
+        await ctx.device.driver.terminateApp(appId).catch(() => undefined);
+        await ctx.device.launch();
+        return `app relaunched with text size ${name}`;
       }
       const android = Math.max(0.85, Math.min(scale, 2.0));
       await adb(["shell", "settings", "put", "system", "font_scale", String(android)]);
@@ -118,7 +131,7 @@ export async function applyEnvironment(ctx: EnvContext, args: EnvArgs): Promise<
         // Per-app language through launch arguments: the app is relaunched with them, now and
         // on every later launch/restart of this session.
         const launchArgs = tag ? iosLocaleArguments(tag) : [];
-        ctx.device.setIosLaunchArguments(launchArgs);
+        ctx.device.setIosLaunchArguments("locale", launchArgs);
         await ctx.device.driver.terminateApp(appId).catch(() => undefined);
         await ctx.device.launch();
         return tag

@@ -84,11 +84,16 @@ export class DeviceController {
     return device;
   }
 
-  /** iOS launch arguments the app is started with (e.g. -AppleLanguages for a locale). */
-  private launchArgs: string[] = [];
+  /** iOS launch arguments by purpose (language, text size); the app starts with all of them. */
+  private readonly launchArgGroups = new Map<string, string[]>();
 
-  setIosLaunchArguments(args: string[]) {
-    this.launchArgs = args;
+  setIosLaunchArguments(group: string, args: string[]) {
+    if (args.length > 0) this.launchArgGroups.set(group, args);
+    else this.launchArgGroups.delete(group);
+  }
+
+  private get launchArgs(): string[] {
+    return [...this.launchArgGroups.values()].flat();
   }
 
   /** Starts the app (or brings it to the front), with the iOS launch arguments when set. */
