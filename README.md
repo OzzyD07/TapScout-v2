@@ -206,6 +206,15 @@ Bir eylemden sonra ref'ler eski kalırsa hub elementi yeni ağaçta kimliğine g
   Job **success** ile bitti. Doğrulama sırasında bulunup düzeltilenler: bundle id'nin
   Info.plist'ten okunması, ASCII dışı yazma, klavye kapatma, `simctl list` bayrak sırası, ilk UI
   ağacı okumasının ısıtılması, kayıt başlangıcının beklenmesi, XCTest log gürültüsü.
+- **`device_environment`:** Yerel Android 16 emülatöründe tüm ayarlar tek çağrıda yaklaşık
+  6 sn'de uygulandı. Koyu mod ve büyük yazı ekranda görüldü; uygulamaya özel dil, konum, uçak modu,
+  galeriye fotoğraf ve parmak izi kaydı ekranı çalıştı, push gerekçesiyle reddedildi. GitHub iOS
+  26.5 Simulator'da koyu mod, yazı boyutu (launch argümanı), konum, push, galeri, dil ve Face ID
+  kaydı/eşleşmesi çalıştı; internetsiz mod gerekçesiyle reddedildi. Tüm ayarlar bir arada 49 sn'de
+  döndü; sığmayan iki ayar listelendi ve ikinci çağrıda uygulandı. Job **success** ile bitti.
+  Doğrulamada iki uygulama kusuru görüldü: koyu modda başlık çubuğu beyaz kalıyor ve iOS'ta durum
+  çubuğu yazıları okunmuyor. Hub tarafındaki bir koordinat hatası da düzeltildi: görünüm alanı
+  pencere boyutundan güncelleniyordu.
 - **Son tur (aynı kodla iki platform):** Android ve iOS oturumları paralel açıldı. Kare
   yakalamada ilk görünür değişiklik her iki platformda da eylemden sonra geldi; iki job da
   **success** ile bitti.
