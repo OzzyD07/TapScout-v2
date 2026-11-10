@@ -987,7 +987,7 @@ export function createMcpServer(manager: SessionManager, uiUrl: string): McpServ
         ((frames[frames.length - 1]?.capturedAt ?? 0) - (frames[0]?.capturedAt ?? 0)) / 1000;
       return {
         text: [
-          `${frames.length} frames over ${span.toFixed(1)} s (${out.data.method === "video" ? "screen video, timing ±0.3 s" : out.data.method === "mjpeg" ? "WDA MJPEG stream" : "screenshot polling"}); ${picked.length} distinct frames shown.`,
+          `${frames.length} frames over ${span.toFixed(1)} s (${out.data.method === "video" ? "screen video: frame order and spacing exact, offset to the action ±0.5 s" : out.data.method === "mjpeg" ? "WDA MJPEG stream" : "screenshot polling"}); ${picked.length} distinct frames shown.`,
           act
             ? `Action: ${act.label} at 0.00 s${out.data.actionError ? ` — FAILED: ${out.data.actionError}` : ""}.`
             : "No action; times are from the start.",

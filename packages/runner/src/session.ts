@@ -377,14 +377,13 @@ export class DeviceSession {
       const actionDone = sleep(delay).then(runAction);
       await sleep(durationMs);
       await actionDone;
-      const stopAt = Date.now();
       const dir = join(this.deps.outDir, `cap-${this.counter++}`);
       await mkdir(dir, { recursive: true });
       const mp4 = join(dir, "capture.mp4");
-      await rec.stop(mp4);
+      const { stoppedAt } = await rec.stop(mp4);
       const extracted = await extractFrames(mp4, join(dir, "frames"), fps, a.maxEdge, a.quality);
       // The video's first frame is the moment recording started; align its end with the stop.
-      const videoStart = Math.max(spawnedAt, stopAt - extracted.durationMs);
+      const videoStart = Math.max(spawnedAt, stoppedAt - extracted.durationMs);
       frames = await Promise.all(
         extracted.frames.map((f) => readFrameFile(f.file, videoStart + f.offsetMs)),
       );

@@ -202,6 +202,8 @@ async function prepare(w: Extract<HubMessage, { t: "welcome" }>) {
   }
   let appPath = buildFile;
   let executable: string | undefined;
+  // XCUITest does not report the bundle id of an installed .app; Info.plist has it.
+  let bundleId: string | undefined;
   if (platform === "ios") {
     const unpacked = join(buildDir, "unpacked");
     execFileSync("ditto", ["-x", "-k", buildFile, unpacked]);
@@ -224,8 +226,9 @@ async function prepare(w: Extract<HubMessage, { t: "welcome" }>) {
           "-",
           join(appPath, "Info.plist"),
         ]).toString("utf8"),
-      ) as { CFBundleExecutable?: string };
+      ) as { CFBundleExecutable?: string; CFBundleIdentifier?: string };
       executable = plist.CFBundleExecutable;
+      bundleId = plist.CFBundleIdentifier;
       const problem = simulatorPlatformProblem(plist);
       if (problem) throw new Error(problem);
     } catch (error) {
@@ -255,7 +258,7 @@ async function prepare(w: Extract<HubMessage, { t: "welcome" }>) {
       keepAppData,
       appiumUrl: values["appium-url"] as string,
       mjpegPort,
-      ...(w.appId ? { appId: w.appId } : {}),
+      ...((w.appId ?? bundleId) ? { appId: w.appId ?? bundleId } : {}),
     });
   let device: DeviceController;
   try {

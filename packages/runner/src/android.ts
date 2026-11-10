@@ -98,10 +98,17 @@ export class AndroidScreenRecord {
   }
 
   /** Stops the recording and pulls the file to `localPath`. */
-  async stop(localPath: string): Promise<{ durationMs: number }> {
+  /**
+   * Stops the recording and pulls the file to `localPath`. `stoppedAt` estimates when the
+   * device received SIGINT (the middle of the adb round trip), i.e. where the video ends.
+   */
+  async stop(localPath: string): Promise<{ durationMs: number; stoppedAt: number }> {
     const durationMs = Date.now() - this.startedAt;
+    let stoppedAt = Date.now();
     if (this.proc) {
+      const t0 = Date.now();
       await adb(["shell", "pkill", "-INT", "screenrecord"], 10_000).catch(() => undefined);
+      stoppedAt = Math.round((t0 + Date.now()) / 2);
       await Promise.race([this.done, sleep(8_000)]);
       this.proc.kill();
       this.proc = null;
@@ -110,7 +117,7 @@ export class AndroidScreenRecord {
     await sleep(700);
     await adb(["pull", this.remotePath, localPath], 120_000);
     await adb(["shell", "rm", "-f", this.remotePath], 10_000).catch(() => undefined);
-    return { durationMs };
+    return { durationMs, stoppedAt };
   }
 }
 

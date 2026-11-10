@@ -77,19 +77,21 @@ export class Tunnel {
         this.url = null;
       }
     });
-    // A new quick-tunnel hostname needs a few seconds before it resolves and routes.
-    const deadline = Date.now() + 90_000;
-    while (Date.now() < deadline) {
+    // A new hostname needs a few seconds to route. The check is short and best effort: this
+    // machine's resolver may cache the not-yet-existing name for a minute, while the runner only
+    // connects minutes later (after booting the device) and retries on its own anyway.
+    await new Promise((r) => setTimeout(r, 3_000));
+    let reachable = false;
+    const deadline = Date.now() + 20_000;
+    while (!reachable && Date.now() < deadline) {
       try {
-        const res = await fetch(`${url}/healthz`, { signal: AbortSignal.timeout(5_000) });
-        if (res.ok) break;
+        reachable = (await fetch(`${url}/healthz`, { signal: AbortSignal.timeout(5_000) })).ok;
       } catch {
-        // Not routable yet.
+        await new Promise((r) => setTimeout(r, 2_000));
       }
-      await new Promise((r) => setTimeout(r, 2_000));
     }
     this.url = url;
-    this.log(`tunnel ready: ${url}`);
+    this.log(`tunnel ${reachable ? "ready" : "started (not reachable from here yet)"}: ${url}`);
     return url;
   }
 
