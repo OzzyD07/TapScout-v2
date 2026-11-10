@@ -51,16 +51,39 @@ export class SimctlRecord {
     return this.proc !== null;
   }
 
-  start(udid: string, file: string) {
-    this.proc = spawn(
+  /**
+   * Starts recording and resolves when simctl reports "Recording started" (the video's time
+   * zero), or null when it did not within 15 s. A SIGINT before that leaves no file at all
+   * (GitHub run 42812708678: a 3 s capture produced nothing).
+   */
+  start(udid: string, file: string): Promise<number | null> {
+    const proc = spawn(
       "xcrun",
       ["simctl", "io", udid, "recordVideo", "--codec=h264", "--force", file],
-      { stdio: "ignore" },
+      {
+        stdio: ["ignore", "pipe", "pipe"],
+      },
     );
+    this.proc = proc;
     this.startedAt = Date.now();
     this.done = new Promise((resolve) => {
-      this.proc?.once("exit", () => resolve());
-      this.proc?.once("error", () => resolve());
+      proc.once("exit", () => resolve());
+      proc.once("error", () => resolve());
+    });
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(null), 15_000);
+      const onData = (chunk: Buffer) => {
+        if (/recording started/i.test(chunk.toString("utf8"))) {
+          clearTimeout(timer);
+          resolve(Date.now());
+        }
+      };
+      proc.stdout?.on("data", onData);
+      proc.stderr?.on("data", onData);
+      proc.once("exit", () => {
+        clearTimeout(timer);
+        resolve(null);
+      });
     });
   }
 

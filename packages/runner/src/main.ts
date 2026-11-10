@@ -276,6 +276,9 @@ async function prepare(w: Extract<HubMessage, { t: "welcome" }>) {
   }
 
   status({ t: "status", state: "starting_app", message: "reading the device" });
+  // The first UI tree read of an XCTest session takes up to ~30 s (GitHub run 42812708678);
+  // pay it here rather than in the agent's first call.
+  if (platform === "ios") await device.source().catch(() => undefined);
   const png = await device.screenshotPng();
   const size = pngSize(png) ?? { width: 0, height: 0 };
   const win = await device.windowSize();
@@ -316,7 +319,12 @@ async function prepare(w: Extract<HubMessage, { t: "welcome" }>) {
     },
     features: {
       liveStream: platform === "ios" ? "mjpeg" : "poll",
-      frameCapture: platform === "android" ? (ffmpeg ? "video" : "poll") : "mjpeg",
+      frameCapture:
+        ffmpeg && (platform === "android" || udid)
+          ? "video"
+          : platform === "ios"
+            ? "mjpeg"
+            : "poll",
       recording: platform === "android" || Boolean(udid),
       logs: logs !== null,
       crashReports: platform === "android" || Boolean(executable),

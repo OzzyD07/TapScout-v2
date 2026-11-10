@@ -105,9 +105,10 @@ export class LogCapture {
         "--level",
         "debug",
         "--predicate",
-        // The app's process, without what XCTest and system frameworks log inside it for every
-        // automation query (accessibility attribute replies, XPC transactions, defaults lookups).
-        `process == "${executable.replace(/"/g, "")}" AND NOT (subsystem BEGINSWITH "com.apple.dt.xctest" OR subsystem BEGINSWITH "com.apple.xpc" OR subsystem BEGINSWITH "com.apple.defaults" OR subsystem BEGINSWITH "com.apple.accessibility" OR subsystem BEGINSWITH "com.apple.UIAccessibility")`,
+        // The app's own logs at every level; Apple frameworks inside the process only when they
+        // report an error or fault. XCTest's automation queries otherwise flood the log with
+        // accessibility, XPC, defaults and CFBundle lookups (GitHub runs 42810396281, 42812708678).
+        `process == "${executable.replace(/"/g, "")}" AND (NOT subsystem BEGINSWITH "com.apple." OR messageType == error OR messageType == fault)`,
       ],
       fromOsLog,
     );

@@ -368,15 +368,18 @@ export class DeviceSession {
     const udid = this.deps.udid;
 
     // Screen video (Android screenrecord / iOS simctl) decoded by ffmpeg: smooth and complete.
+    let video: {
+      dir: string;
+      mp4: string;
+      spawnedAt: number;
+      firstFrameAt: number | null;
+      stop: () => Promise<{ stoppedAt: number }>;
+    } | null = null;
     if (!this.recorder && fps > 3 && (android || udid) && (await findFfmpeg())) {
-      method = "video";
       const dir = join(this.deps.outDir, `cap-${this.counter++}`);
       await mkdir(dir, { recursive: true });
       const mp4 = join(dir, "capture.mp4");
       const spawnedAt = Date.now();
-      let stop: () => Promise<{ stoppedAt: number }>;
-      // Time zero of the video, when it can be observed (Android: first bytes on disk).
-      let firstFrameAt: number | null = null;
       if (android) {
         const rec = new AndroidScreenRecord(`cap-${Date.now()}`);
         rec.start(
@@ -384,25 +387,40 @@ export class DeviceSession {
           8_000_000,
           recordSize(this.info.screenshotWidth, this.info.screenshotHeight),
         );
-        stop = () => rec.stop(mp4);
-        firstFrameAt = await rec.waitFirstFrame();
+        // Time zero of the video: the first bytes on disk (the first encoded frame).
+        const firstFrameAt = await rec.waitFirstFrame();
         await sleep(firstFrameAt ? 150 : 500);
+        video = { dir, mp4, spawnedAt, firstFrameAt, stop: () => rec.stop(mp4) };
       } else {
         const rec = new SimctlRecord();
-        rec.start(udid as string, mp4);
-        stop = () => rec.stop();
-        // recordVideo needs about a second before frames are written.
-        await sleep(1_500);
+        const firstFrameAt = await rec.start(udid as string, mp4);
+        if (firstFrameAt) {
+          await sleep(150);
+          video = { dir, mp4, spawnedAt, firstFrameAt, stop: () => rec.stop() };
+        } else {
+          await rec.stop().catch(() => undefined);
+          this.deps.log("simctl recordVideo did not start; capturing from the MJPEG stream");
+        }
       }
+    }
+    if (video) {
+      method = "video";
       startedAt = Date.now();
       const actionDone = sleep(delay).then(runAction);
       await sleep(durationMs);
       await actionDone;
-      const { stoppedAt } = await stop();
-      const extracted = await extractFrames(mp4, join(dir, "frames"), fps, a.maxEdge, a.quality);
-      // Anchored at the first encoded frame when observed; otherwise at the stop (the video ends
-      // where the recorder was stopped, so it started that minus its length).
-      const videoStart = firstFrameAt ?? Math.max(spawnedAt, stoppedAt - extracted.durationMs);
+      const { stoppedAt } = await video.stop();
+      const extracted = await extractFrames(
+        video.mp4,
+        join(video.dir, "frames"),
+        fps,
+        a.maxEdge,
+        a.quality,
+      );
+      // Anchored at the first frame when observed; otherwise at the stop (the video ends where
+      // the recorder was stopped, so it started that minus its length).
+      const videoStart =
+        video.firstFrameAt ?? Math.max(video.spawnedAt, stoppedAt - extracted.durationMs);
       frames = await Promise.all(
         extracted.frames.map((f) => readFrameFile(f.file, videoStart + f.offsetMs)),
       );
@@ -492,7 +510,10 @@ export class DeviceSession {
         if (!this.deps.udid)
           throw new DeviceError("unsupported", "recording needs the simulator UDID");
         const rec = new SimctlRecord();
-        rec.start(this.deps.udid, file);
+        if ((await rec.start(this.deps.udid, file)) === null) {
+          await rec.stop().catch(() => undefined);
+          throw new DeviceError("record_failed", "simctl recordVideo did not start");
+        }
         this.recorder = rec;
       }
       this.recordingFile = file;

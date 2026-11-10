@@ -148,7 +148,8 @@ export class DeviceOps {
   }
 
   async tree(opts: { includeAll?: boolean; maxElements?: number } = {}): Promise<UiTree> {
-    const out = await this.command("source", {} as CommandArgs<"source">);
+    // iOS page sources of big screens take seconds; keep well inside the 60 s tool limit.
+    const out = await this.command("source", {} as CommandArgs<"source">, 45_000);
     const d = this.s.record.device;
     if (!d) throw new SessionError("not_ready", "no device info");
     const tree = normalizeTree(d.platform, out.data.xml, {
