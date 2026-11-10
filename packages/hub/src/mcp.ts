@@ -4,7 +4,13 @@
 import { readFile, stat } from "node:fs/promises";
 import { basename } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { type CommandArgs, center, type KeyName, pxToView } from "@tapscout/shared";
+import {
+  type CommandArgs,
+  type CommandResult,
+  center,
+  type KeyName,
+  pxToView,
+} from "@tapscout/shared";
 import { z } from "zod";
 import { HUB_VERSION } from "./config.js";
 import { toView, zoom } from "./images.js";
@@ -888,7 +894,34 @@ export function createMcpServer(manager: SessionManager, uiUrl: string): McpServ
       }
       if (Object.keys(args).length === 0)
         throw new SessionError("bad_args", "give at least one setting to change");
-      const out = await ops.act("env", args, 50_000);
+      // One setting per command, within a time budget: on a CI simulator single settings take
+      // 5–20 s (appearance 14 s, push 19 s, media 16 s) and simctl runs them one at a time, so
+      // all of them together overran the 60 s tool limit. What does not fit is reported as not
+      // applied, to be sent again.
+      const ORDER: (keyof CommandArgs<"env">)[] = [
+        "appearance",
+        "fontScale",
+        "location",
+        "network",
+        "push",
+        "media",
+        "locale",
+        "biometric",
+      ];
+      const started = Date.now();
+      const results: CommandResult<"env">["results"] = [];
+      const pending: string[] = [];
+      for (const key of ORDER) {
+        if (!(key in args)) continue;
+        if (Date.now() - started > 30_000) {
+          pending.push(key);
+          continue;
+        }
+        const one = { [key]: args[key] } as CommandArgs<"env">;
+        const r = await ops.act("env", one, 45_000);
+        results.push(...r.data.results);
+      }
+      const out = { data: { results } };
       const env = { ...(s.record.environment ?? {}) };
       const shown: Record<string, string> = {
         appearance: a.appearance ?? "",
@@ -902,6 +935,11 @@ export function createMcpServer(manager: SessionManager, uiUrl: string): McpServ
       s.record.environment = env;
       await s.save();
       const lines = out.data.results.map((r) => `${r.ok ? "✓" : "✗"} ${r.setting}: ${r.message}`);
+      if (pending.length > 0) {
+        lines.push(
+          `… not applied yet (one call stays under the tool time limit): ${pending.join(", ")}. Call device_environment again with ${pending.length === 1 ? "it" : "them"}.`,
+        );
+      }
       if (a.restart_app) {
         await ops.act("app", { action: "restart" }, 120_000);
         lines.push("App restarted.");
