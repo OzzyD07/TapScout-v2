@@ -1,0 +1,5 @@
+# actionlint configuration (CI job "workflows" in ci.yml).
+self-hosted-runner:
+  # GitHub-hosted labels newer than the pinned actionlint release.
+  labels:
+    - macos-26

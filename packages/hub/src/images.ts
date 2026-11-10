@@ -151,7 +151,9 @@ export async function contactSheet(
   const first = await sharp(frames[0]?.data).metadata();
   const aspect = (first.width ?? 9) / (first.height ?? 16);
   const maxEdge = opts.maxEdge ?? 1568;
-  const columns = opts.columns ?? Math.min(frames.length, aspect < 1 ? 6 : 3);
+  // Fewest rows for the frame count, then as few columns as fill them (8 frames: 2×4, not 6+2).
+  const maxColumns = aspect < 1 ? 6 : 3;
+  const columns = opts.columns ?? Math.ceil(frames.length / Math.ceil(frames.length / maxColumns));
   const rows = Math.ceil(frames.length / columns);
   const labelH = 20;
   const gap = 4;
