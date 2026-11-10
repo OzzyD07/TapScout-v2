@@ -131,6 +131,8 @@ export interface CommandMap {
   };
   /** iOS: answers the system alert in front by its button label. */
   alert: { args: { button: string }; result: Record<string, never> };
+  /** Device environment: each given setting is applied and reported on its own. */
+  env: { args: EnvArgs; result: { results: EnvResult[] } };
   tap: {
     args: { x: number; y: number; count?: number; intervalMs?: number };
     result: Record<string, never>;
@@ -224,6 +226,25 @@ export type RunnerAction =
   | { name: "pinch"; args: CommandArgs<"pinch"> }
   | { name: "key"; args: CommandArgs<"key"> }
   | { name: "app"; args: CommandArgs<"app"> };
+
+export interface EnvArgs {
+  appearance?: "dark" | "light";
+  /** BCP 47 tag ("tr-TR", "zh-Hans-CN"); "" resets to the device language. Applies to the app. */
+  locale?: string;
+  /** Text size multiplier (1 = default); iOS maps it to the nearest content size category. */
+  fontScale?: number;
+  location?: { latitude: number; longitude: number; altitude?: number };
+  network?: "offline" | "online";
+  push?: { title: string; body: string; badge?: number; data?: Record<string, unknown> };
+  biometric?: "enroll" | "match" | "no_match";
+  media?: { fileName: string; dataBase64: string };
+}
+
+export interface EnvResult {
+  setting: keyof EnvArgs;
+  ok: boolean;
+  message: string;
+}
 
 export type LogLevel = "verbose" | "debug" | "info" | "warn" | "error" | "fatal";
 

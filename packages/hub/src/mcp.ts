@@ -1,6 +1,8 @@
 // MCP server: the tools an external agent uses to drive a device session. The hub never decides
 // what to test or whether something is a bug; it executes, observes and keeps evidence.
 
+import { readFile, stat } from "node:fs/promises";
+import { basename } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { type CommandArgs, center, type KeyName, pxToView } from "@tapscout/shared";
 import { z } from "zod";
@@ -21,6 +23,8 @@ Coordinates: every x/y/region is in VIEW UNITS = pixels of the default device_sc
 What you can see: only still images returned by tools; there is no video in your context. For animations, transitions, flicker or toasts use device_capture_frames (timestamped frames over a few seconds, optionally around an action, as one contact-sheet image). device_recent_frames shows the last seconds of the live buffer (something that already happened). The live stream and MP4 recordings (device_recording) are for the human watching the local web UI, not for you.
 
 Cost: each image is ~1k tokens. Pass observe="none" or "tree" when you do not need a picture; keep frame captures short.
+
+Environment: device_environment switches dark mode, the app's language, text size, GPS location, offline mode, sends pushes (iOS), simulates Face ID / fingerprints and adds photos/videos to the gallery.
 
 Dialogs: permission requests and alerts appear on the "Dialog" line of device_ui_tree; answer with device_tap element="alert:Allow" (works for iOS system alerts that are not in the tree).
 
@@ -200,6 +204,8 @@ export function createMcpServer(manager: SessionManager, uiUrl: string): McpServ
         `Capabilities: live stream ${d.features.liveStream}, frame capture ${d.features.frameCapture}, recording ${d.features.recording ? "yes" : "no"}, logs ${d.features.logs ? "yes" : "no"}, crash reports ${d.features.crashReports ? "yes" : "no"}`,
       );
     }
+    const env = Object.entries(r.environment ?? {});
+    if (env.length) lines.push(`Environment: ${env.map(([k, v]) => `${k}=${v}`).join(", ")}`);
     if (s.active) {
       lines.push(
         `Idle timeout: ${r.options.idleMinutes} min without tool calls; max length ${r.options.maxMinutes} min.`,
@@ -787,6 +793,120 @@ export function createMcpServer(manager: SessionManager, uiUrl: string): McpServ
         a.settle_ms,
         "app_control",
       );
+    },
+  );
+
+  tool(
+    "device_environment",
+    'Change the device environment for a test: dark/light appearance, the app\'s language (BCP 47 like "tr-TR"; "" resets), text size (font_scale, 1 = default), GPS location, offline mode (Android), a push notification (iOS Simulator), Face ID / fingerprint (enroll, match, no_match) and adding a photo or video from this machine to the gallery. Give only the settings to change; each is reported separately (unsupported ones say why).',
+    {
+      session_id: sessionId,
+      appearance: z.enum(["dark", "light"]).optional(),
+      locale: z
+        .string()
+        .max(35)
+        .optional()
+        .describe(
+          'App language as a BCP 47 tag ("tr-TR", "ar-EG", "zh-Hans-CN"); "" = device language',
+        ),
+      font_scale: z
+        .number()
+        .min(0.8)
+        .max(3.1)
+        .optional()
+        .describe("Text size; Android 0.85–2.0, iOS maps to the nearest content size category"),
+      location: z
+        .object({
+          latitude: z.number().min(-90).max(90),
+          longitude: z.number().min(-180).max(180),
+          altitude: z.number().optional(),
+        })
+        .optional(),
+      network: z
+        .enum(["offline", "online"])
+        .optional()
+        .describe("Android only: airplane mode on/off"),
+      push: z
+        .object({
+          title: z.string().max(200),
+          body: z.string().max(1_000),
+          badge: z.number().int().min(0).optional(),
+          data: z
+            .record(z.string(), z.unknown())
+            .optional()
+            .describe("Custom payload keys next to aps"),
+        })
+        .optional()
+        .describe("iOS Simulator only (Android pushes come from FCM via the app's server)"),
+      biometric: z
+        .enum(["enroll", "match", "no_match"])
+        .optional()
+        .describe(
+          "iOS: enroll Face ID/Touch ID or send a (non-)matching attempt. Android: enroll opens the fingerprint setup; match/no_match touch the sensor",
+        ),
+      media_path: z
+        .string()
+        .optional()
+        .describe(
+          "Absolute path of an image or video on this machine to add to the gallery (≤ 25 MB)",
+        ),
+      restart_app: z
+        .boolean()
+        .default(false)
+        .describe(
+          "Restart the app afterwards (some apps read language or text size only at start)",
+        ),
+      observe: observe.default("screenshot"),
+      settle_ms: settle.default(1_000),
+    },
+    async (a, use) => {
+      const { s, ops } = use(a.session_id);
+      const args: CommandArgs<"env"> = {
+        ...(a.appearance ? { appearance: a.appearance } : {}),
+        ...(a.locale !== undefined ? { locale: a.locale } : {}),
+        ...(a.font_scale !== undefined ? { fontScale: a.font_scale } : {}),
+        ...(a.location ? { location: a.location } : {}),
+        ...(a.network ? { network: a.network } : {}),
+        ...(a.push ? { push: a.push } : {}),
+        ...(a.biometric ? { biometric: a.biometric } : {}),
+      };
+      if (a.media_path) {
+        if (!/\.(jpe?g|png|gif|heic|webp|mp4|mov|m4v)$/i.test(a.media_path)) {
+          throw new SessionError(
+            "bad_args",
+            "media_path must be an image (jpg, png, gif, heic, webp) or a video (mp4, mov, m4v)",
+          );
+        }
+        const info = await stat(a.media_path).catch(() => null);
+        if (!info?.isFile()) throw new SessionError("bad_args", `no file at ${a.media_path}`);
+        if (info.size > 25 * 1024 * 1024)
+          throw new SessionError("bad_args", "media files are limited to 25 MB");
+        args.media = {
+          fileName: basename(a.media_path),
+          dataBase64: (await readFile(a.media_path)).toString("base64"),
+        };
+      }
+      if (Object.keys(args).length === 0)
+        throw new SessionError("bad_args", "give at least one setting to change");
+      const out = await ops.act("env", args, 50_000);
+      const env = { ...(s.record.environment ?? {}) };
+      const shown: Record<string, string> = {
+        appearance: a.appearance ?? "",
+        locale: a.locale === "" ? "device" : (a.locale ?? ""),
+        fontScale: String(a.font_scale ?? ""),
+        location: a.location ? `${a.location.latitude},${a.location.longitude}` : "",
+        network: a.network ?? "",
+      };
+      for (const r of out.data.results)
+        if (r.ok && shown[r.setting]) env[r.setting] = shown[r.setting] as string;
+      s.record.environment = env;
+      await s.save();
+      const lines = out.data.results.map((r) => `${r.ok ? "✓" : "✗"} ${r.setting}: ${r.message}`);
+      if (a.restart_app) {
+        await ops.act("app", { action: "restart" }, 120_000);
+        lines.push("App restarted.");
+      }
+      return withObservation(ops, lines.join("\n"), a.observe, a.settle_ms, "device_environment");
     },
   );
 

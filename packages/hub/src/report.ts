@@ -60,6 +60,8 @@ export async function buildReport(
       `- Device: ${d.deviceName}, ${d.platform} ${d.osVersion} (${d.host === "github" ? "GitHub-hosted runner" : "local"}), app \`${d.appId}\``,
     );
   if (r.github?.runUrl) md.push(`- GitHub run: ${r.github.runUrl}`);
+  const env = Object.entries(r.environment ?? {});
+  if (env.length) md.push(`- Device environment: ${env.map(([k, v]) => `${k} ${v}`).join(", ")}`);
   md.push(
     `- Started: ${r.createdAt}${r.readyAt ? `, ready ${r.readyAt}` : ""}${r.closedAt ? `, ended ${r.closedAt} (${r.closeReason})` : ` — state: ${r.state}`}`,
   );

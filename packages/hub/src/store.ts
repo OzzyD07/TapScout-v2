@@ -41,6 +41,8 @@ export interface SessionRecord {
   options: { maxMinutes: number; idleMinutes: number };
   /** sha256 of the one-time local runner token (the token itself is never stored). */
   localTokenHash?: string;
+  /** Device environment settings the agent changed (setting → applied value). */
+  environment?: Record<string, string>;
   readyAt?: string;
   closedAt?: string;
   closeReason?: string;

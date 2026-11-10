@@ -114,3 +114,31 @@ describe("iOS crash reports", () => {
     expect(s).toMatch(/FieldNotes -\[Notes save\]/);
   });
 });
+
+describe("environment helpers", () => {
+  it("maps text scale to iOS content size categories", async () => {
+    const { iosContentSize } = await import("../src/environment.js");
+    expect(iosContentSize(1)).toBe("large");
+    expect(iosContentSize(1.3)).toBe("extra-extra-extra-large");
+    expect(iosContentSize(0.85)).toBe("small");
+    expect(iosContentSize(3)).toBe("accessibility-extra-extra-extra-large");
+  });
+
+  it("turns BCP 47 tags into iOS launch arguments", async () => {
+    const { iosLocaleArguments } = await import("../src/environment.js");
+    expect(iosLocaleArguments("tr-TR")).toEqual([
+      "-AppleLanguages",
+      "(tr)",
+      "-AppleLocale",
+      "tr_TR",
+    ]);
+    expect(iosLocaleArguments("zh-Hans-CN")).toEqual([
+      "-AppleLanguages",
+      "(zh-Hans)",
+      "-AppleLocale",
+      "zh_CN",
+    ]);
+    expect(iosLocaleArguments("de")).toEqual(["-AppleLanguages", "(de)", "-AppleLocale", "de"]);
+    expect(iosLocaleArguments("")).toEqual([]);
+  });
+});

@@ -24,6 +24,7 @@ import {
   screencapPng,
 } from "./android.js";
 import { type DeviceController, DeviceError } from "./device.js";
+import { applyEnvironment } from "./environment.js";
 import { sleep } from "./exec.js";
 import {
   extractFrames,
@@ -183,6 +184,18 @@ export class DeviceSession {
         let alert: { text: string; buttons: string[] } | null = null;
         if (this.info.platform === "ios") alert = await d.systemAlert();
         return { data: { xml, capturedAt: Date.now(), ...(alert ? { alert } : {}) } };
+      }
+      case "env": {
+        const results = await applyEnvironment(
+          {
+            device: d,
+            info: this.info,
+            outDir: this.deps.outDir,
+            ...(this.deps.udid ? { udid: this.deps.udid } : {}),
+          },
+          rawArgs as CommandArgs<"env">,
+        );
+        return { data: { results } };
       }
       case "alert": {
         if (this.info.platform !== "ios") {

@@ -151,6 +151,14 @@ class FakeRunner {
         });
       case "crashes":
         return ok({ reports: [] });
+      case "env": {
+        const results = Object.keys(args).map((setting) =>
+          setting === "network"
+            ? { setting, ok: false, message: "not on this device" }
+            : { setting, ok: true, message: `${setting} applied` },
+        );
+        return ok({ results });
+      }
       case "app":
         return ok({ state: 4, stateName: "foreground", pid: 123 });
       case "capture_frames": {

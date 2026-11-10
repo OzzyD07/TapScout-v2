@@ -84,6 +84,25 @@ export class DeviceController {
     return device;
   }
 
+  /** iOS launch arguments the app is started with (e.g. -AppleLanguages for a locale). */
+  private launchArgs: string[] = [];
+
+  setIosLaunchArguments(args: string[]) {
+    this.launchArgs = args;
+  }
+
+  /** Starts the app (or brings it to the front), with the iOS launch arguments when set. */
+  async launch(): Promise<void> {
+    if (this.platform === "ios" && this.launchArgs.length > 0) {
+      await this.driver.execute("mobile: launchApp", {
+        bundleId: this.appId,
+        arguments: this.launchArgs,
+      });
+      return;
+    }
+    await this.driver.activateApp(this.appId);
+  }
+
   get capabilities() {
     return this.driver.capabilities as Record<string, unknown>;
   }
@@ -375,7 +394,7 @@ export class DeviceController {
     const id = this.appId;
     switch (args.action) {
       case "launch":
-        await this.driver.activateApp(id);
+        await this.launch();
         break;
       case "terminate":
         await this.driver.terminateApp(id).catch(() => undefined);
@@ -383,7 +402,7 @@ export class DeviceController {
       case "restart":
         await this.driver.terminateApp(id).catch(() => undefined);
         if (args.clearData) await this.clearData();
-        await this.driver.activateApp(id);
+        await this.launch();
         break;
       case "clear_data":
         await this.driver.terminateApp(id).catch(() => undefined);
