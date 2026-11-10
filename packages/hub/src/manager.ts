@@ -189,6 +189,8 @@ export class SessionManager {
     const gh = this.github as GitHubClient;
     await s.setState("dispatching", "starting the public tunnel");
     const hubUrl = await this.tunnel.ensure();
+    // Stopped while the tunnel came up: nothing was started on GitHub yet.
+    if (!s.active) return;
     await s.setState("dispatching", `dispatching ${this.config.github.workflow} on ${gh.repo}`);
     const since = new Date();
     const dispatched = await gh.dispatch(this.config.github.workflow, this.config.github.ref, {

@@ -13,7 +13,7 @@ import { loadConfig } from "./config.js";
 const argv = process.argv.slice(2);
 const outIdx = argv.indexOf("--out");
 const outDir = resolve(outIdx >= 0 ? (argv[outIdx + 1] ?? ".") : ".");
-const positional = argv.filter((_, i) => i !== outIdx && i !== outIdx + 1);
+const positional = outIdx >= 0 ? argv.filter((_, i) => i !== outIdx && i !== outIdx + 1) : argv;
 const config = loadConfig();
 const client = new Client({ name: "tapscout-call", version: "1" });
 await client.connect(
