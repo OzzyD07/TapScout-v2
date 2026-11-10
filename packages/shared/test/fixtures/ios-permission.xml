@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<AppiumAUT>
+  <XCUIElementTypeApplication type="XCUIElementTypeApplication" name="Habo" label="Habo" enabled="true" visible="true" accessible="false" x="0" y="0" width="402" height="874" bundleId="com.pavlenko.Habo">
+    <XCUIElementTypeWindow type="XCUIElementTypeWindow" enabled="true" visible="true" x="0" y="0" width="402" height="874">
+      <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Habits" name="Habits" label="Habits" enabled="true" visible="true" x="20" y="70" width="120" height="30"/>
+    </XCUIElementTypeWindow>
+    <XCUIElementTypeAlert type="XCUIElementTypeAlert" name="“Habo” Would Like to Send You Notifications" label="“Habo” Would Like to Send You Notifications" enabled="true" visible="true" x="66" y="331" width="270" height="212">
+      <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Notifications may include alerts, sounds, and icon badges." enabled="true" visible="true" x="82" y="380" width="238" height="48"/>
+      <XCUIElementTypeButton type="XCUIElementTypeButton" name="Don’t Allow" label="Don’t Allow" enabled="true" visible="true" x="66" y="499" width="135" height="44"/>
+      <XCUIElementTypeButton type="XCUIElementTypeButton" name="Allow" label="Allow" enabled="true" visible="true" x="201" y="499" width="135" height="44"/>
+    </XCUIElementTypeAlert>
+  </XCUIElementTypeApplication>
+</AppiumAUT>

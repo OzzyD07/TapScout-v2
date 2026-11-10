@@ -1,0 +1,114 @@
+name: build-sample
+
+# Builds the FieldNotes sample app (apps/sample-app) as test input for device sessions:
+#  - Android: release APK with the x86_64 ABI the emulators run
+#  - iOS: arm64 iOS Simulator .app, zipped (not a device .ipa)
+# The builds are workflow artifacts; download them with
+#   gh run download <run id> -n fieldnotes-<variant>-android   (or -ios)
+on:
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: Sample variant (seeded has known bugs)
+        type: choice
+        options: [seeded, fixed, changed_flow, login]
+        default: seeded
+      platforms:
+        description: Platforms to build
+        type: choice
+        options: [both, android, ios]
+        default: both
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-sample-${{ inputs.variant }}-${{ inputs.platforms }}
+  cancel-in-progress: true
+
+env:
+  VARIANT: ${{ inputs.variant }}
+  EXPO_PUBLIC_APP_VARIANT: ${{ inputs.variant }}
+  EXPO_NO_TELEMETRY: "1"
+
+jobs:
+  android:
+    if: inputs.platforms != 'ios'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install sample app dependencies
+        working-directory: apps/sample-app
+        run: npm install --no-audit --no-fund
+      - name: Generate native Android project
+        working-directory: apps/sample-app
+        run: npx expo prebuild --platform android --clean --no-install
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Assemble release APK (x86_64)
+        working-directory: apps/sample-app/android
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon --stacktrace
+      - name: Collect APK
+        run: |
+          mkdir -p out
+          cp apps/sample-app/android/app/build/outputs/apk/release/app-release.apk "out/fieldnotes-${VARIANT}-android-x86_64.apk"
+          node scripts/ci/build-manifest.mjs --file "out/fieldnotes-${VARIANT}-android-x86_64.apk" \
+            --platform android --variant "$VARIANT" --arch x86_64 --toolchain "jdk17"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: fieldnotes-${{ env.VARIANT }}-android
+          path: out/
+          retention-days: 30
+          if-no-files-found: error
+
+  ios:
+    if: inputs.platforms != 'android'
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app && xcodebuild -version
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Install sample app dependencies
+        working-directory: apps/sample-app
+        run: npm install --no-audit --no-fund
+      - name: Generate native iOS project
+        working-directory: apps/sample-app
+        run: npx expo prebuild --platform ios --clean --no-install
+      - name: Install pods
+        working-directory: apps/sample-app/ios
+        run: pod install
+      - name: Build for iOS Simulator (arm64)
+        working-directory: apps/sample-app/ios
+        run: |
+          workspace=$(basename "$(find . -maxdepth 1 -name '*.xcworkspace' | head -1)")
+          scheme="${workspace%.xcworkspace}"
+          echo "SCHEME=$scheme" >> "$GITHUB_ENV"
+          set -o pipefail
+          xcodebuild -workspace "$workspace" -scheme "$scheme" -configuration Release \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO \
+            build | tail -n 200
+      - name: Collect .app zip
+        run: |
+          mkdir -p out
+          app="apps/sample-app/ios/build/Build/Products/Release-iphonesimulator/${SCHEME}.app"
+          ditto -c -k --sequesterRsrc --keepParent "$app" "out/fieldnotes-${VARIANT}-ios-sim-arm64.app.zip"
+          node scripts/ci/build-manifest.mjs --file "out/fieldnotes-${VARIANT}-ios-sim-arm64.app.zip" \
+            --platform ios --variant "$VARIANT" --arch arm64 --toolchain "$(xcodebuild -version | tr '\n' ' ')"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: fieldnotes-${{ env.VARIANT }}-ios
+          path: out/
+          retention-days: 30
+          if-no-files-found: error

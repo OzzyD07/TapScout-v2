@@ -1,0 +1,37 @@
+{
+  "name": "@tapscout/runner",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Device runner: connects to the TapScout hub, installs the build on an Android emulator or iOS Simulator through Appium and executes the agent's commands.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "tapscout-runner": "./dist/main.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "prepare": "pnpm build"
+  },
+  "dependencies": {
+    "@tapscout/shared": "workspace:*",
+    "sharp": "0.35.5",
+    "webdriverio": "^10.0.1",
+    "ws": "^8.18.0"
+  },
+  "optionalDependencies": {
+    "ffmpeg-static": "^5.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "@types/ws": "^8.18.1",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

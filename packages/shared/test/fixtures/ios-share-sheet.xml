@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<AppiumAUT>
+  <XCUIElementTypeApplication type="XCUIElementTypeApplication" name="Ice Cubes" label="Ice Cubes" enabled="true" visible="true" accessible="false" x="0" y="0" width="402" height="874" index="0" traits="" bundleId="dev.tapscout.fieldnotes">
+    <XCUIElementTypeWindow type="XCUIElementTypeWindow" enabled="true" visible="true" accessible="false" x="0" y="0" width="402" height="874" index="0" traits="">
+      <XCUIElementTypeOther type="XCUIElementTypeOther" name="PopoverDismissRegion" label="dismiss popup" enabled="true" visible="true" accessible="true" x="0" y="0" width="402" height="874" index="0" traits=""/>
+      <XCUIElementTypeOther type="XCUIElementTypeOther" name="ActivityListView" enabled="true" visible="true" accessible="false" x="9" y="94" width="384" height="380" index="1" traits="">
+        <XCUIElementTypeOther type="XCUIElementTypeOther" name="ShareSheet.RemoteContainerView" enabled="true" visible="true" accessible="false" x="9" y="94" width="384" height="380" index="0" traits="">
+          <XCUIElementTypeNavigationBar type="XCUIElementTypeNavigationBar" name="UIActivityContentView" enabled="true" visible="true" accessible="false" x="9" y="94" width="384" height="105" index="0" traits=""/>
+          <XCUIElementTypeCell type="XCUIElementTypeCell" name="shareCell" label="Reminders" enabled="true" visible="true" accessible="true" x="27" y="198" width="83" height="123" index="1" traits="Button"/>
+          <XCUIElementTypeCell type="XCUIElementTypeCell" name="actionGroupCell" label="Copy" enabled="true" visible="true" accessible="true" x="27" y="322" width="83" height="139" index="2" traits="Button"/>
+        </XCUIElementTypeOther>
+      </XCUIElementTypeOther>
+    </XCUIElementTypeWindow>
+  </XCUIElementTypeApplication>
+</AppiumAUT>

@@ -1,0 +1,187 @@
+name: device-session
+# The session id in the title lets the hub find the run when the dispatch answer has no run id.
+run-name: device-session ${{ inputs.session_id }} (${{ inputs.platform }})
+
+# One device session for the local TapScout hub. The job boots an Android emulator (Linux + KVM)
+# or an iOS Simulator (macOS), then the runner connects OUT to the hub's gateway URL, proves its
+# identity with a GitHub OIDC token, downloads the build from the hub, installs it through
+# Appium and executes the agent's commands until the hub ends the session.
+# Nothing about the app under test is printed or uploaded here: screens, logs and recordings go
+# to the hub only (this repository's logs are public). Artifact upload is opt-in.
+on:
+  workflow_dispatch:
+    inputs:
+      session_id:
+        description: TapScout session id (UUID)
+        type: string
+        required: true
+      platform:
+        description: Device platform
+        type: choice
+        options: [android, ios]
+        default: android
+      hub_url:
+        description: Public https origin of the hub's runner gateway
+        type: string
+        required: true
+      max_minutes:
+        description: Session length limit in minutes (5-330)
+        type: string
+        default: "60"
+      android_api:
+        description: Android API level of the emulator
+        type: choice
+        options: ["35", "34", "36"]
+        default: "35"
+      animations:
+        description: Keep system animations on (they are part of what is tested)
+        type: boolean
+        default: true
+      keep_launcher:
+        description: Keep the Android launcher enabled (it often hangs after a cold boot)
+        type: boolean
+        default: false
+      upload_artifacts:
+        description: Upload runner logs as a workflow artifact (public on public repositories)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: device-session-${{ inputs.session_id }}
+  cancel-in-progress: false
+
+env:
+  SESSION_ID: ${{ inputs.session_id }}
+  HUB_URL: ${{ inputs.hub_url }}
+  MAX_MINUTES: ${{ inputs.max_minutes }}
+  TAPSCOUT_OIDC_AUDIENCE: tapscout-v2
+  OUT: .artifacts/session
+  APPIUM_VERSION: 3.8.0
+  UIAUTOMATOR2_VERSION: 8.7.0
+  XCUITEST_VERSION: 12.16.0
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    outputs:
+      job_timeout: ${{ steps.check.outputs.job_timeout }}
+    steps:
+      - name: Validate inputs
+        id: check
+        run: |
+          if ! [[ "$SESSION_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
+            echo "session_id must be a UUID" >&2; exit 1
+          fi
+          if ! [[ "$HUB_URL" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?/?$ ]]; then
+            echo "hub_url must be an https origin" >&2; exit 1
+          fi
+          if ! [[ "$MAX_MINUTES" =~ ^[0-9]+$ ]] || [ "$MAX_MINUTES" -lt 5 ] || [ "$MAX_MINUTES" -gt 330 ]; then
+            echo "max_minutes must be 5-330" >&2; exit 1
+          fi
+          # Device setup takes up to ~20 minutes on a cold runner; the runner itself stops at
+          # max_minutes after it starts.
+          echo "job_timeout=$((MAX_MINUTES + 25))" >> "$GITHUB_OUTPUT"
+
+  android:
+    needs: validate
+    if: inputs.platform == 'android'
+    runs-on: ubuntu-24.04
+    timeout-minutes: ${{ fromJSON(needs.validate.outputs.job_timeout) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install the runner
+        run: pnpm install --frozen-lockfile --filter "@tapscout/runner..."
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install Appium and UiAutomator2
+        run: |
+          npm install -g "appium@${APPIUM_VERSION}"
+          appium driver install "uiautomator2@${UIAUTOMATOR2_VERSION}"
+      # Google's SDK repository failed now and then (TapScout v1); the cached image is reused.
+      - name: Cache the emulator system image
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/lib/android/sdk/system-images/android-${{ inputs.android_api }}/google_apis/x86_64
+          key: android-sysimg-${{ inputs.android_api }}-google_apis-x86_64-v1
+      - name: Boot emulator and run the device session
+        uses: ReactiveCircus/android-emulator-runner@v2
+        env:
+          KEEP_LAUNCHER: ${{ inputs.keep_launcher }}
+        with:
+          api-level: ${{ inputs.android_api }}
+          arch: x86_64
+          target: google_apis
+          profile: pixel_7
+          disable-animations: ${{ !inputs.animations }}
+          emulator-boot-timeout: 600
+          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash scripts/ci/android-session.sh
+      - uses: actions/upload-artifact@v7
+        if: always() && inputs.upload_artifacts
+        with:
+          name: session-android
+          path: |
+            ${{ env.OUT }}
+            !${{ env.OUT }}/build
+          retention-days: 3
+
+  ios:
+    needs: validate
+    if: inputs.platform == 'ios'
+    runs-on: macos-26
+    timeout-minutes: ${{ fromJSON(needs.validate.outputs.job_timeout) }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app && xcodebuild -version
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install the runner
+        run: pnpm install --frozen-lockfile --filter "@tapscout/runner..."
+      - name: Install Appium and XCUITest
+        run: |
+          npm install -g "appium@${APPIUM_VERSION}"
+          appium driver install "xcuitest@${XCUITEST_VERSION}"
+      - name: Download prebuilt WebDriverAgent
+        continue-on-error: true
+        run: |
+          appium driver run xcuitest download-wda -- --outdir="$RUNNER_TEMP/wda" --kind=sim --platform=ios
+          wda=$(find "$RUNNER_TEMP/wda" -maxdepth 2 -name 'WebDriverAgentRunner-Runner.app' | head -1)
+          if [ -n "$wda" ]; then echo "WDA=$wda" >> "$GITHUB_ENV"; fi
+      - name: Boot simulator
+        run: echo "UDID=$(bash scripts/ci/ios-boot-simulator.sh | tail -1)" >> "$GITHUB_ENV"
+      - name: Run the device session
+        run: |
+          OUT="$OUT" bash scripts/ci/start-appium.sh
+          status=0
+          wda_args=()
+          if [ -n "${WDA:-}" ]; then wda_args=(--wda "$WDA"); fi
+          node packages/runner/dist/main.js --platform ios --hub "$HUB_URL" --session "$SESSION_ID" \
+            --auth github --udid "$UDID" --out "$OUT" --max-minutes "$MAX_MINUTES" \
+            --appium-log "$OUT/appium.log" "${wda_args[@]}" || status=$?
+          kill "$(cat "$OUT/appium.pid")" 2>/dev/null || true
+          exit "$status"
+      - uses: actions/upload-artifact@v7
+        if: always() && inputs.upload_artifacts
+        with:
+          name: session-ios
+          path: |
+            ${{ env.OUT }}
+            !${{ env.OUT }}/build
+          retention-days: 3

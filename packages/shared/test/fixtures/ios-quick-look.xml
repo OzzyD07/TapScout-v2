@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<AppiumAUT>
+  <XCUIElementTypeApplication type="XCUIElementTypeApplication" name="Ice Cubes" label="Ice Cubes" enabled="true" visible="true" accessible="false" x="0" y="0" width="402" height="874" index="0" traits="" bundleId="dev.tapscout.fieldnotes">
+    <XCUIElementTypeWindow type="XCUIElementTypeWindow" enabled="true" visible="true" accessible="false" x="0" y="0" width="402" height="874" index="0" traits="">
+      <XCUIElementTypeOther type="XCUIElementTypeOther" name="QLPreviewControllerView" enabled="true" visible="true" accessible="false" x="0" y="0" width="402" height="874" index="0" traits="">
+        <XCUIElementTypeButton type="XCUIElementTypeButton" name="QLOverlayDoneButtonAccessibilityIdentifier" label="close" enabled="true" visible="true" accessible="true" x="16" y="62" width="44" height="44" index="0" traits="Button"/>
+        <XCUIElementTypeOther type="XCUIElementTypeOther" name="Image canvas" label="Image canvas" enabled="true" visible="true" accessible="true" x="0" y="99" width="402" height="676" index="1" traits=""/>
+        <XCUIElementTypeButton type="XCUIElementTypeButton" name="QLOverlayDefaultActionButtonAccessibilityIdentifier" label="Share" enabled="true" visible="true" accessible="true" x="340" y="62" width="44" height="44" index="2" traits="Button"/>
+      </XCUIElementTypeOther>
+    </XCUIElementTypeWindow>
+  </XCUIElementTypeApplication>
+</AppiumAUT>

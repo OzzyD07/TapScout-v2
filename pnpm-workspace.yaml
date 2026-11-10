@@ -1,0 +1,9 @@
+packages:
+  - "packages/*"
+onlyBuiltDependencies:
+  - esbuild
+  - ffmpeg-static
+ignoredBuiltDependencies:
+  - edgedriver
+  - geckodriver
+  - sharp

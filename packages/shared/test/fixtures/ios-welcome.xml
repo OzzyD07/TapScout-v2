@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<AppiumAUT>
+  <XCUIElementTypeApplication type="XCUIElementTypeApplication" name="FieldNotes" label="FieldNotes" enabled="true" visible="true" accessible="false" x="0" y="0" width="402" height="874" index="0" traits="" processId="18591" bundleId="dev.tapscout.fieldnotes">
+    <XCUIElementTypeWindow type="XCUIElementTypeWindow" enabled="true" visible="true" accessible="false" x="0" y="0" width="402" height="874" index="0" traits="">
+      <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="0" width="402" height="874" index="0" traits="">
+        <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="0" width="402" height="874" index="0" traits="">
+          <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="0" width="402" height="874" index="0" traits="">
+            <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="0" width="402" height="874" index="0" traits="">
+              <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="0" width="402" height="874" index="0" traits="">
+                <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="0" width="402" height="874" index="0" traits="">
+                  <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="0" width="402" height="874" index="0" traits="">
+                    <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="0" width="402" height="874" index="0" traits="">
+                      <XCUIElementTypeNavigationBar type="XCUIElementTypeNavigationBar" name="FieldNotes" enabled="true" visible="true" accessible="false" x="0" y="62" width="402" height="54" index="0" traits="">
+                        <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="FieldNotes" name="FieldNotes" label="FieldNotes" enabled="true" visible="true" accessible="true" x="158" y="73" width="86" height="22" index="0" traits="Header"/>
+                      </XCUIElementTypeNavigationBar>
+                      <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="0" width="402" height="874" index="1" traits="">
+                        <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="0" width="402" height="874" index="0" traits="">
+                          <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="116" width="402" height="758" index="0" traits="">
+                            <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="116" width="402" height="758" index="0" traits="">
+                              <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="116" width="402" height="758" index="0" traits="">
+                                <XCUIElementTypeOther type="XCUIElementTypeOther" name="welcome-screen" enabled="true" visible="true" accessible="false" x="0" y="116" width="402" height="758" index="0" traits="">
+                                  <XCUIElementTypeScrollView type="XCUIElementTypeScrollView" enabled="true" visible="true" accessible="false" x="0" y="116" width="402" height="758" index="0" traits="">
+                                    <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="116" width="402" height="758" index="0" traits="">
+                                      <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="0" y="116" width="402" height="758" index="0" traits="">
+                                        <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Welcome to FieldNotes" name="Welcome to FieldNotes" label="Welcome to FieldNotes" enabled="true" visible="true" accessible="false" x="20" y="136" width="362" height="32" index="0" traits="Header, StaticText">
+                                          <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Welcome to FieldNotes" name="Welcome to FieldNotes" label="Welcome to FieldNotes" enabled="true" visible="true" accessible="true" x="20" y="136" width="362" height="32" index="0" traits="Header, StaticText"/>
+                                        </XCUIElementTypeStaticText>
+                                        <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Keep short notes from the field and share a simple profile with your team." name="Keep short notes from the field and share a simple profile with your team." label="Keep short notes from the field and share a simple profile with your team." enabled="true" visible="true" accessible="false" x="20" y="183" width="362" height="45" index="1" traits="StaticText">
+                                          <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" value="Keep short notes from the field and share a simple profile with your team." name="Keep short notes from the field and share a simple profile with your team." label="Keep short notes from the field and share a simple profile with your team." enabled="true" visible="true" accessible="true" x="20" y="183" width="362" height="45" index="0" traits="StaticText"/>
+                                        </XCUIElementTypeStaticText>
+                                        <XCUIElementTypeButton type="XCUIElementTypeButton" name="welcome-get-started" label="Get started" enabled="true" visible="true" accessible="true" x="20" y="243" width="362" height="49" index="2" traits="Button"/>
+                                      </XCUIElementTypeOther>
+                                    </XCUIElementTypeOther>
+                                    <XCUIElementTypeOther type="XCUIElementTypeOther" value="0%" name="Vertical scroll bar, 1 page" label="Vertical scroll bar, 1 page" enabled="true" visible="true" accessible="false" x="369" y="144" width="30" height="668" index="1" traits="Adjustable">
+                                      <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="396" y="119" width="3" height="806" index="0" traits=""/>
+                                    </XCUIElementTypeOther>
+                                    <XCUIElementTypeOther type="XCUIElementTypeOther" value="0%" name="Horizontal scroll bar, 1 page" label="Horizontal scroll bar, 1 page" enabled="true" visible="true" accessible="false" x="62" y="807" width="278" height="30" index="2" traits="Adjustable">
+                                      <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="65" y="834" width="272" height="3" index="0" traits=""/>
+                                    </XCUIElementTypeOther>
+                                    <XCUIElementTypeOther type="XCUIElementTypeOther" value="0%" name="Vertical scroll bar, 1 page" label="Vertical scroll bar, 1 page" enabled="true" visible="true" accessible="false" x="369" y="144" width="30" height="668" index="3" traits="Adjustable">
+                                      <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="396" y="119" width="3" height="806" index="0" traits=""/>
+                                    </XCUIElementTypeOther>
+                                    <XCUIElementTypeOther type="XCUIElementTypeOther" value="0%" name="Horizontal scroll bar, 1 page" label="Horizontal scroll bar, 1 page" enabled="true" visible="true" accessible="false" x="62" y="807" width="278" height="30" index="4" traits="Adjustable">
+                                      <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="true" accessible="false" x="65" y="834" width="272" height="3" index="0" traits=""/>
+                                    </XCUIElementTypeOther>
+                                  </XCUIElementTypeScrollView>
+                                </XCUIElementTypeOther>
+                              </XCUIElementTypeOther>
+                            </XCUIElementTypeOther>
+                          </XCUIElementTypeOther>
+                        </XCUIElementTypeOther>
+                      </XCUIElementTypeOther>
+                      <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="0" y="0" width="402" height="874" index="2" traits="">
+                        <XCUIElementTypeOther type="XCUIElementTypeOther" enabled="true" visible="false" accessible="false" x="0" y="0" width="402" height="874" index="0" traits=""/>
+                      </XCUIElementTypeOther>
+                    </XCUIElementTypeOther>
+                  </XCUIElementTypeOther>
+                </XCUIElementTypeOther>
+              </XCUIElementTypeOther>
+            </XCUIElementTypeOther>
+          </XCUIElementTypeOther>
+        </XCUIElementTypeOther>
+      </XCUIElementTypeOther>
+    </XCUIElementTypeWindow>
+  </XCUIElementTypeApplication>
+</AppiumAUT>

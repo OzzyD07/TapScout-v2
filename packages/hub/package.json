@@ -1,0 +1,38 @@
+{
+  "name": "@tapscout/hub",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Local TapScout hub: MCP server, local web UI, runner gateway, GitHub dispatch and tunnel, file-based session store.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "tapscout-hub": "./dist/main.js",
+    "tapscout-mcp": "./dist/mcp-stdio.js"
+  },
+  "files": [
+    "dist",
+    "public"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "prepare": "pnpm build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@tapscout/shared": "workspace:*",
+    "jose": "^6.1.0",
+    "sharp": "0.35.5",
+    "ws": "^8.18.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "@types/ws": "^8.18.1",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "tapscout-v2",
+  "private": true,
+  "description": "TapScout v2: Android emulator and iOS Simulator sessions on GitHub Actions (or locally), driven by an external agent over MCP.",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@10.34.6",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "check": "pnpm lint && pnpm typecheck && pnpm test",
+    "hub": "node --env-file-if-exists=.env packages/hub/dist/main.js",
+    "hub:stop": "node packages/hub/dist/main.js --stop",
+    "mcp": "node packages/hub/dist/mcp-stdio.js",
+    "setup:local": "node scripts/setup-local.mjs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.2.0",
+    "typescript": "^5.9.2"
+  }
+}

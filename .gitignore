@@ -1,0 +1,36 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# builds
+dist/
+*.tsbuildinfo
+coverage/
+
+# env and secrets: only .env.example is committed
+.env
+.env.*
+!.env.example
+
+# hub data (sessions, evidence, builds, hub secret) and local tools (Appium, cloudflared)
+.data/
+.tools/
+
+# mobile build outputs
+*.apk
+*.aab
+*.ipa
+*.app.zip
+apps/sample-app/android/
+apps/sample-app/ios/
+apps/sample-app/.expo/
+
+# runner local artifacts
+.artifacts/
+
+# os / editor
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/

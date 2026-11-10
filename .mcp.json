@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "tapscout": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["packages/hub/dist/mcp-stdio.js"]
+    }
+  }
+}
