@@ -375,6 +375,8 @@ export class DeviceSession {
       const mp4 = join(dir, "capture.mp4");
       const spawnedAt = Date.now();
       let stop: () => Promise<{ stoppedAt: number }>;
+      // Time zero of the video, when it can be observed (Android: first bytes on disk).
+      let firstFrameAt: number | null = null;
       if (android) {
         const rec = new AndroidScreenRecord(`cap-${Date.now()}`);
         rec.start(
@@ -383,7 +385,8 @@ export class DeviceSession {
           recordSize(this.info.screenshotWidth, this.info.screenshotHeight),
         );
         stop = () => rec.stop(mp4);
-        await sleep(500);
+        firstFrameAt = await rec.waitFirstFrame();
+        await sleep(firstFrameAt ? 150 : 500);
       } else {
         const rec = new SimctlRecord();
         rec.start(udid as string, mp4);
@@ -397,8 +400,9 @@ export class DeviceSession {
       await actionDone;
       const { stoppedAt } = await stop();
       const extracted = await extractFrames(mp4, join(dir, "frames"), fps, a.maxEdge, a.quality);
-      // The video ends where the recorder was stopped; its first frame is that minus its length.
-      const videoStart = Math.max(spawnedAt, stoppedAt - extracted.durationMs);
+      // Anchored at the first encoded frame when observed; otherwise at the stop (the video ends
+      // where the recorder was stopped, so it started that minus its length).
+      const videoStart = firstFrameAt ?? Math.max(spawnedAt, stoppedAt - extracted.durationMs);
       frames = await Promise.all(
         extracted.frames.map((f) => readFrameFile(f.file, videoStart + f.offsetMs)),
       );

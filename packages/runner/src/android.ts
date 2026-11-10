@@ -99,6 +99,22 @@ export class AndroidScreenRecord {
 
   /** Stops the recording and pulls the file to `localPath`. */
   /**
+   * Polls the output file until it has bytes, which happens when the encoder delivers its first
+   * frame: that moment is the video's time zero. Null when it does not happen in time.
+   */
+  async waitFirstFrame(timeoutMs = 3_000): Promise<number | null> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const t0 = Date.now();
+      const out = await adb(["shell", "stat", "-c", "%s", this.remotePath], 5_000).catch(() => "");
+      const t1 = Date.now();
+      if (Number(out.trim()) > 0) return Math.round((t0 + t1) / 2);
+      await sleep(15);
+    }
+    return null;
+  }
+
+  /**
    * Stops the recording and pulls the file to `localPath`. `stoppedAt` estimates when the
    * device received SIGINT (the middle of the adb round trip), i.e. where the video ends.
    */
