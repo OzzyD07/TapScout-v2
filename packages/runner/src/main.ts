@@ -376,7 +376,6 @@ conn.run().then(
 
 await finished;
 clearInterval(deadlineTimer);
-log(`stopping: ${finishReason}`);
 if (conn.open) status({ t: "status", state: "stopping", message: finishReason ?? "stopping" });
 
 // Final evidence goes to the hub while it is reachable; nothing is printed to the job log.

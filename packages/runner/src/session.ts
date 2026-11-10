@@ -15,7 +15,14 @@ import {
   type StreamSettings,
 } from "@tapscout/shared";
 import sharp from "sharp";
-import { AndroidScreenRecord, adb, pidOf, recoverEmulator, screencapPng } from "./android.js";
+import {
+  AndroidScreenRecord,
+  adb,
+  pidOf,
+  recordSize,
+  recoverEmulator,
+  screencapPng,
+} from "./android.js";
 import { type DeviceController, DeviceError } from "./device.js";
 import { sleep } from "./exec.js";
 import {
@@ -360,7 +367,11 @@ export class DeviceSession {
       method = "video";
       const rec = new AndroidScreenRecord(`cap-${Date.now()}`);
       const spawnedAt = Date.now();
-      rec.start(Math.ceil((durationMs + delay) / 1000) + 3, 8_000_000);
+      rec.start(
+        Math.ceil((durationMs + delay) / 1000) + 3,
+        8_000_000,
+        recordSize(this.info.screenshotWidth, this.info.screenshotHeight),
+      );
       await sleep(500);
       startedAt = Date.now();
       const actionDone = sleep(delay).then(runAction);
@@ -450,7 +461,11 @@ export class DeviceSession {
       if (this.info.platform === "android") {
         const rec = new AndroidScreenRecord(`rec-${Date.now()}`);
         // 2.5 Mbit/s keeps a full 180 s recording (~56 MB) under tunnel request limits.
-        rec.start(a.maxSeconds ?? 180, 2_500_000);
+        rec.start(
+          a.maxSeconds ?? 180,
+          2_500_000,
+          recordSize(this.info.screenshotWidth, this.info.screenshotHeight),
+        );
         this.recorder = rec;
       } else {
         if (!this.deps.udid)

@@ -802,6 +802,11 @@ export function createMcpServer(manager: SessionManager, uiUrl: string): McpServ
     async (a, use) => {
       const { ops } = use(a.session_id);
       const out = await ops.act("orientation", { set: a.orientation });
+      // The view space swaps with the orientation: refresh the geometry before any other action.
+      if (a.observe !== "screenshot" && a.observe !== "both") {
+        await new Promise((r) => setTimeout(r, a.settle_ms));
+        await ops.capture();
+      }
       return withObservation(
         ops,
         `Orientation: ${out.data.orientation}.`,

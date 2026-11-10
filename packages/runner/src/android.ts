@@ -70,7 +70,11 @@ export class AndroidScreenRecord {
     return this.proc !== null;
   }
 
-  start(maxSeconds: number, bitRate = 6_000_000) {
+  /**
+   * `size` should keep the display aspect ratio: without it screenrecord falls back to an
+   * encoder size of its own on tall displays and pillarboxes the picture.
+   */
+  start(maxSeconds: number, bitRate = 6_000_000, size?: { width: number; height: number }) {
     const limit = Math.max(1, Math.min(180, Math.round(maxSeconds)));
     this.proc = spawn(
       adbBin(),
@@ -81,6 +85,7 @@ export class AndroidScreenRecord {
         String(bitRate),
         "--time-limit",
         String(limit),
+        ...(size ? ["--size", `${size.width}x${size.height}`] : []),
         this.remotePath,
       ],
       { stdio: "ignore", windowsHide: true },
@@ -107,6 +112,14 @@ export class AndroidScreenRecord {
     await adb(["shell", "rm", "-f", this.remotePath], 10_000).catch(() => undefined);
     return { durationMs };
   }
+}
+
+/** A recording size with the screen's aspect ratio, long edge ≤ `longEdge`, multiples of 16. */
+export function recordSize(width: number, height: number, longEdge = 1280) {
+  if (!width || !height) return undefined;
+  const k = Math.min(1, longEdge / Math.max(width, height));
+  const even = (n: number) => Math.max(16, Math.round((n * k) / 16) * 16);
+  return { width: even(width), height: even(height) };
 }
 
 export const ANDROID_KEYCODES: Record<string, number | [number, number]> = {
