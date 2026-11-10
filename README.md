@@ -139,6 +139,19 @@ Bir eylemden sonra ref'ler eski kalırsa hub elementi yeni ağaçta kimliğine g
   `TAPSCOUT_PUBLIC_URL` kullanılır.
 - Android `screenrecord` en fazla 180 sn kaydeder.
 
+## Doğrulama durumu
+
+- **Yerel Android (Windows, Android 16 emülatörü), FieldNotes `seeded` build'i:** Runner AVD'yi
+  boot etti, Appium'u `.tools/`'tan başlattı ve build'i kurdu. MCP araçlarının hepsi gerçek
+  cihazda çalıştırıldı: dokunma (ref, id ve text), Türkçe ve emoji ile yazma, klavye, kaydırma,
+  sürükleme, uzun basma, pinch, döndürme, arka plan, `app_restart`, bir dokunmanın etrafında
+  kare yakalama (geçiş animasyonu görüldü), canlı tampon, MP4 kayıt, loglar, çökme sorgusu, kanıt
+  ve bulgu, rapor, durdurma. Kapanışta loglar yüklendi ve Appium kapandı. Ajan döngüsüyle
+  planlanmış "profil düzenlemesi yeniden başlatınca kayboluyor" hatası yeniden üretildi.
+- **GitHub Actions (Android ve iOS):** Workflow'lar CI'da actionlint'ten geçiyor ve örnek
+  uygulamanın her iki platform için build'i GitHub'da başarıyla alındı. Tünel üzerinden uçtan uca
+  oturum henüz çalıştırılmadı: quick tunnel'ı açmak açık izin gerektiriyor.
+
 ## Geliştirme
 
 ```bash
