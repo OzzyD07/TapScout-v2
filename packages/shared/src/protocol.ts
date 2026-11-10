@@ -201,6 +201,8 @@ export interface CommandMap {
       method: "video" | "mjpeg" | "poll";
       startedAt: number;
       actionAt?: number;
+      /** When the action call returned (XCTest actions can take seconds). */
+      actionDoneAt?: number;
       actionError?: string;
     };
   };

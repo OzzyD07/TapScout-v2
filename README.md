@@ -148,9 +148,13 @@ Bir eylemden sonra ref'ler eski kalırsa hub elementi yeni ağaçta kimliğine g
   kare yakalama (geçiş animasyonu görüldü), canlı tampon, MP4 kayıt, loglar, çökme sorgusu, kanıt
   ve bulgu, rapor, durdurma. Kapanışta loglar yüklendi ve Appium kapandı. Ajan döngüsüyle
   planlanmış "profil düzenlemesi yeniden başlatınca kayboluyor" hatası yeniden üretildi.
-- **GitHub Actions (Android ve iOS):** Workflow'lar CI'da actionlint'ten geçiyor ve örnek
-  uygulamanın her iki platform için build'i GitHub'da başarıyla alındı. Tünel üzerinden uçtan uca
-  oturum henüz çalıştırılmadı: quick tunnel'ı açmak açık izin gerektiriyor.
+- **GitHub Actions Android (Android 15 emülatörü, ubuntu-24.04):** Hub cloudflared quick
+  tunnel'ı açtı ve workflow'u tetikledi; GitHub adımları oturum durumunda takip edildi. Runner
+  OIDC ile bağlandı, 41 MB'lık build'i 18 sn'de indirdi; oturum açılıştan yaklaşık 5 dk sonra
+  hazırdı. Ekran, yazma, kare yakalama, canlı tampon, loglar, kanıt ve bulgu çalıştı. Planlanmış
+  "klavye Continue'yu kapatıyor" hatası görüldü. Appium bir kez "socket hang up" ile düştü;
+  runner uygulama verisini koruyarak oturumu yeniden açtı. `session_stop` sonrası loglar geldi ve
+  job **success** ile bitti. Public job logunda yazılan metin, token veya tünel adresi yok.
 
 ## Geliştirme
 

@@ -989,7 +989,7 @@ export function createMcpServer(manager: SessionManager, uiUrl: string): McpServ
         text: [
           `${frames.length} frames over ${span.toFixed(1)} s (${out.data.method === "video" ? "screen video: frame order and spacing exact, offset to the action ±0.5 s" : out.data.method === "mjpeg" ? "WDA MJPEG stream" : "screenshot polling"}); ${picked.length} distinct frames shown.`,
           act
-            ? `Action: ${act.label} at 0.00 s${out.data.actionError ? ` — FAILED: ${out.data.actionError}` : ""}.`
+            ? `Action: ${act.label} started at 0.00 s${out.data.actionDoneAt && out.data.actionAt ? `, returned at ${((out.data.actionDoneAt - out.data.actionAt) / 1000).toFixed(2)} s (the touch lands somewhere in between)` : ""}${out.data.actionError ? ` — FAILED: ${out.data.actionError}` : ""}.`
             : "No action; times are from the start.",
           `Shown frames (s): ${picked.map((f) => ((f.capturedAt - zeroAt) / 1000).toFixed(2)).join(", ")}`,
           `All frames: ${manager.store.sessionPath(s.id, "evidence", "captures", capId)} (evidence path "evidence/captures/${capId}")`,

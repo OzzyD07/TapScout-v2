@@ -347,6 +347,7 @@ export class DeviceSession {
     const fps = Math.max(1, Math.min(a.fps, 30));
     const delay = Math.max(0, a.actionDelayMs ?? 300);
     let actionAt: number | undefined;
+    let actionDoneAt: number | undefined;
     let actionError: string | undefined;
     const runAction = async () => {
       if (!a.action) return;
@@ -356,33 +357,47 @@ export class DeviceSession {
       } catch (error) {
         actionError = (error as Error).message.slice(0, 300);
       }
+      // XCTest actions can take seconds; the agent sees when the action really finished.
+      actionDoneAt = Date.now();
     };
 
     let frames: Frame[] = [];
     let method: "video" | "mjpeg" | "poll" = "poll";
     let startedAt = Date.now();
     const android = this.info.platform === "android";
+    const udid = this.deps.udid;
 
-    if (android && !this.recorder && fps > 3 && (await findFfmpeg())) {
+    // Screen video (Android screenrecord / iOS simctl) decoded by ffmpeg: smooth and complete.
+    if (!this.recorder && fps > 3 && (android || udid) && (await findFfmpeg())) {
       method = "video";
-      const rec = new AndroidScreenRecord(`cap-${Date.now()}`);
+      const dir = join(this.deps.outDir, `cap-${this.counter++}`);
+      await mkdir(dir, { recursive: true });
+      const mp4 = join(dir, "capture.mp4");
       const spawnedAt = Date.now();
-      rec.start(
-        Math.ceil((durationMs + delay) / 1000) + 3,
-        8_000_000,
-        recordSize(this.info.screenshotWidth, this.info.screenshotHeight),
-      );
-      await sleep(500);
+      let stop: () => Promise<{ stoppedAt: number }>;
+      if (android) {
+        const rec = new AndroidScreenRecord(`cap-${Date.now()}`);
+        rec.start(
+          Math.ceil((durationMs + delay) / 1000) + 3,
+          8_000_000,
+          recordSize(this.info.screenshotWidth, this.info.screenshotHeight),
+        );
+        stop = () => rec.stop(mp4);
+        await sleep(500);
+      } else {
+        const rec = new SimctlRecord();
+        rec.start(udid as string, mp4);
+        stop = () => rec.stop();
+        // recordVideo needs about a second before frames are written.
+        await sleep(1_500);
+      }
       startedAt = Date.now();
       const actionDone = sleep(delay).then(runAction);
       await sleep(durationMs);
       await actionDone;
-      const dir = join(this.deps.outDir, `cap-${this.counter++}`);
-      await mkdir(dir, { recursive: true });
-      const mp4 = join(dir, "capture.mp4");
-      const { stoppedAt } = await rec.stop(mp4);
+      const { stoppedAt } = await stop();
       const extracted = await extractFrames(mp4, join(dir, "frames"), fps, a.maxEdge, a.quality);
-      // The video's first frame is the moment recording started; align its end with the stop.
+      // The video ends where the recorder was stopped; its first frame is that minus its length.
       const videoStart = Math.max(spawnedAt, stoppedAt - extracted.durationMs);
       frames = await Promise.all(
         extracted.frames.map((f) => readFrameFile(f.file, videoStart + f.offsetMs)),
@@ -392,22 +407,24 @@ export class DeviceSession {
       method = "mjpeg";
       await this.configureMjpeg({ fps, maxEdge: a.maxEdge, quality: a.quality });
       const got: Frame[] = [];
-      let first = false;
       const reader = new MjpegReader(
         `http://127.0.0.1:${this.deps.mjpegPort}`,
         (jpeg, at) => {
-          first = true;
           got.push({ data: jpeg, width: 0, height: 0, capturedAt: at });
         },
         () => undefined,
       );
       reader.start();
+      // WDA's stream starts late: wait for its first frame before the action.
+      for (let i = 0; i < 50 && got.length === 0; i++) await sleep(100);
       startedAt = Date.now();
       const actionDone = sleep(delay).then(runAction);
       await sleep(durationMs);
       await actionDone;
       reader.stop();
-      if (!first) {
+      const live = this.stream.current;
+      if (live.fps > 0) await this.configureMjpeg(live).catch(() => undefined);
+      if (got.length === 0) {
         method = "poll";
       } else {
         frames = await Promise.all(
@@ -420,7 +437,7 @@ export class DeviceSession {
     }
     if (method === "poll") {
       startedAt = Date.now();
-      const actionDone = sleep(delay).then(runAction);
+      const actionDone = actionAt === undefined ? sleep(delay).then(runAction) : Promise.resolve();
       frames = await pollFrames(() => this.grab(), durationMs, fps, a.maxEdge, a.quality);
       await actionDone;
     }
@@ -447,6 +464,7 @@ export class DeviceSession {
       method,
       startedAt,
       ...(actionAt ? { actionAt } : {}),
+      ...(actionDoneAt ? { actionDoneAt } : {}),
       ...(actionError ? { actionError } : {}),
     };
     return { data, payload: Buffer.concat(frames.map((f) => f.data)) };

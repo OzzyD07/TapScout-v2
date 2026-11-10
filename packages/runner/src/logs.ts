@@ -105,7 +105,9 @@ export class LogCapture {
         "--level",
         "debug",
         "--predicate",
-        `process == "${executable.replace(/"/g, "")}"`,
+        // The app's process, without what XCTest and system frameworks log inside it for every
+        // automation query (accessibility attribute replies, XPC transactions, defaults lookups).
+        `process == "${executable.replace(/"/g, "")}" AND NOT (subsystem BEGINSWITH "com.apple.dt.xctest" OR subsystem BEGINSWITH "com.apple.xpc" OR subsystem BEGINSWITH "com.apple.defaults" OR subsystem BEGINSWITH "com.apple.accessibility" OR subsystem BEGINSWITH "com.apple.UIAccessibility")`,
       ],
       fromOsLog,
     );

@@ -10,7 +10,7 @@ import { execText, sleep } from "./exec.js";
 export async function simulatorName(udid: string | undefined): Promise<string | undefined> {
   if (!udid) return undefined;
   try {
-    const list = JSON.parse(await execText("xcrun", ["simctl", "list", "devices", "-j"])) as {
+    const list = JSON.parse(await execText("xcrun", ["simctl", "list", "-j", "devices"])) as {
       devices: Record<string, { udid: string; name: string }[]>;
     };
     return Object.values(list.devices)
@@ -25,7 +25,7 @@ export async function simulatorName(udid: string | undefined): Promise<string | 
 export async function bootedSimulator(): Promise<string | undefined> {
   try {
     const list = JSON.parse(
-      await execText("xcrun", ["simctl", "list", "devices", "booted", "-j"]),
+      await execText("xcrun", ["simctl", "list", "-j", "devices", "booted"]),
     ) as { devices: Record<string, { udid: string }[]> };
     return Object.values(list.devices).flat()[0]?.udid;
   } catch {
@@ -64,14 +64,16 @@ export class SimctlRecord {
     });
   }
 
-  async stop(): Promise<{ durationMs: number }> {
-    const durationMs = Date.now() - this.startedAt;
+  /** Stops the recording; `stoppedAt` is when SIGINT was sent (where the video ends). */
+  async stop(): Promise<{ durationMs: number; stoppedAt: number }> {
+    const stoppedAt = Date.now();
+    const durationMs = stoppedAt - this.startedAt;
     if (this.proc) {
       this.proc.kill("SIGINT");
       await Promise.race([this.done, sleep(10_000)]);
       this.proc = null;
     }
-    return { durationMs };
+    return { durationMs, stoppedAt };
   }
 }
 

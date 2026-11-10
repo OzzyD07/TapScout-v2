@@ -25,6 +25,8 @@ type Pointer = {
 };
 
 const ELEMENT_KEY = "element-6066-11e4-a52e-4f735466cecf";
+/** Text the US on-screen keyboard can type directly (printable ASCII, newline, tab). */
+const PLAIN_TYPABLE = /^[\x20-\x7e\n\t]*$/;
 
 export class DeviceError extends Error {
   constructor(
@@ -242,12 +244,36 @@ export class DeviceController {
       }
     } else {
       if (mode === "replace") await this.driver.elementClear(id);
-      if (text) await this.driver.elementSendKeys(id, text);
+      // XCTest types through the on-screen keyboard and stops at characters it does not have
+      // ("ş", emoji: only "A" of "Ayşe" arrived on a GitHub runner). Other text is pasted.
+      if (text && PLAIN_TYPABLE.test(text)) await this.driver.elementSendKeys(id, text);
+      else if (text) await this.pasteIos(id, text);
     }
     const value = await this.driver
       .getElementAttribute(id, this.platform === "ios" ? "value" : "text")
       .catch(() => null);
     return { focused: true, ...(typeof value === "string" ? { value } : {}) };
+  }
+
+  /** iOS Simulator: put the text on the pasteboard and paste it with ⌘V (edit menu as fallback). */
+  private async pasteIos(elementId: string, text: string) {
+    await this.driver.execute("mobile: setPasteboard", { content: text, encoding: "utf8" });
+    try {
+      await this.driver.execute("mobile: keys", {
+        elementId,
+        keys: [{ key: "v", modifierFlags: 1 << 4 }],
+      });
+      return;
+    } catch {
+      // No hardware-keyboard events: use the edit menu.
+    }
+    await this.driver.execute("mobile: touchAndHold", { elementId, duration: 1.0 });
+    await sleep(600);
+    const paste = await this.driver.$('-ios predicate string:label == "Paste"');
+    if (!(await paste.isExisting())) {
+      throw new DeviceError("type_failed", "could not paste: the edit menu has no Paste item");
+    }
+    await paste.click();
   }
 
   async key({ key, times = 1 }: CommandArgs<"key">): Promise<void> {
@@ -310,14 +336,30 @@ export class DeviceController {
   }
 
   /** Closes the keyboard; on iOS the keyboard's return-type keys are tried after the driver's own attempt. */
+  /**
+   * Closes the keyboard and returns whether it is still shown. iOS has no generic dismiss: the
+   * driver's attempt, then the keyboard's own done/return keys, then the Return key (single-line
+   * fields resign focus on submit). Nothing outside the keyboard is tapped.
+   */
   async hideKeyboard(): Promise<boolean> {
     try {
       await this.driver.hideKeyboard();
     } catch (error) {
       if (this.platform !== "ios") throw error;
-      await this.driver.execute("mobile: hideKeyboard", {
-        keys: ["done", "Done", "return", "Return", "go", "Go", "search", "Search"],
-      });
+    }
+    if (this.platform === "ios") {
+      const attempts = [
+        () =>
+          this.driver.execute("mobile: hideKeyboard", {
+            keys: ["done", "Done", "return", "Return", "go", "Go", "search", "Search"],
+          }),
+        () => this.driver.keys(["\n"]),
+      ];
+      for (const attempt of attempts) {
+        await sleep(250);
+        if (!(await this.keyboardShown())) return false;
+        await attempt().catch(() => undefined);
+      }
     }
     await sleep(250);
     return this.keyboardShown();

@@ -184,6 +184,10 @@ export class LiveStream {
 
   constructor(private readonly deps: LiveStreamDeps) {}
 
+  get current(): StreamSettings {
+    return this.settings;
+  }
+
   update(settings: StreamSettings) {
     const changed =
       settings.fps !== this.settings.fps ||
