@@ -299,6 +299,32 @@ değiştirir.
 - **Son tur (aynı kodla iki platform):** Android ve iOS oturumları paralel açıldı. Kare
   yakalamada ilk görünür değişiklik her iki platformda da eylemden sonra geldi; iki job da
   **success** ile bitti.
+- **Görsel kalite, performans, testler ve zaman aşımları** (yerel Android 16 emülatörü ve GitHub
+  iOS 26.5 Simulator, FieldNotes `fixed` ve `seeded`):
+  - *Regresyon:* Ajan "profil hakkında metni yeniden başlatınca korunur" akışını (14 adım, Türkçe
+    metinle) Android'de kaydetti. Test `fixed` build'de geçti (`new`), `seeded` build'de 13. adımda
+    "No bio yet." ile kaldı ve **REGRESSION** olarak işaretlendi. Kanıt ekranı hatayı
+    gösteriyordu. Aynı test hiç değiştirilmeden iOS'ta da çalıştı: `fixed` geçti, `seeded`
+    REGRESSION. Bir `test_run` çağrısı Android (yerel) ve iOS (GitHub) oturumlarını paralel
+    çalıştırdı; Android sonucu önceki seeded sonucuna göre `fixed` sınıfını aldı. `test_compare`
+    iki platformu ayrı tablolarda gösterdi. Bir test Android'de yaklaşık 32 sn, iOS'ta 150–170
+    sn sürdü.
+  - *Görsel denetim:* Android'de ve iOS'ta açık ve koyu modda çalıştı (1–3 sn). iOS koyu modda
+    okunaklı gri bir metin 1.0:1 kontrastla işaretlenmişti; kontrast hesabı düzeltildi. Aynı
+    ekran görüntüsü artık 7.3:1 veriyor. Koyu modda beyaz kalan başlık çubuğu ve görünmeyen durum
+    çubuğu simgeleri görüntüde açıkça görülüyor.
+  - *Performans:* Android'de soğuk açılış (`am start -W`) yaklaşık 1,2 sn, bir dokunmanın ilk
+    görünür etkisi 168 ms ve durulması 501 ms; gfxinfo jank oranı da raporlandı. iOS'ta
+    `launchctl` ile bulunan süreç için CPU, RSS ve iş parçacıkları; dokunmanın ilk etkisi 525 ms,
+    durulması 1425 ms, ~16 fps; soğuk açılış 5,2 sn. Bir de 8 sn'lik örnekleme yapıldı.
+  - *Zaman aşımı:* Kısaltılmış sürelerle (`TAPSCOUT_TIMEOUT_FACTOR`) zaman aşımı, ardından
+    `device_busy` ve "geç bitti" notu görüldü. Takılan komut Appium oturumunun değiştirilmesine
+    yol açtı; uygulama yazılmış metniyle aynı ekranda kaldı.
+  - *Doğrulamada bulunup düzeltilenler:* aynı sürüm numaralı build'in kurulmaması
+    (`enforceAppInstall`); iOS'ta alan temizlendikten sonra ⌘V'nin hata vermeden hiçbir şey
+    yapıştırmaması (artık alanın değeri kontrol ediliyor, gerekirse tekrar deneniyor); kontrast
+    hesabı; Google sistem uygulamasının çökmesinin "no_crash" beklentisini bozması (artık yalnızca
+    uygulamanın süreçleri sayılıyor); oturum değiştirilirken Appium'un uygulamayı durdurması.
 
 ## Geliştirme
 

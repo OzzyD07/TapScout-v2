@@ -299,13 +299,33 @@ export class DeviceController {
       if (mode === "replace") await this.driver.elementClear(id);
       // XCTest types through the on-screen keyboard and stops at characters it does not have
       // ("ş", emoji: only "A" of "Ayşe" arrived on a GitHub runner). Other text is pasted.
-      if (text && PLAIN_TYPABLE.test(text)) await this.driver.elementSendKeys(id, text);
+      if (text && PLAIN_TYPABLE.test(text)) await this.typeIos(id, text);
       else if (text) await this.pasteIos(id, text);
     }
     const value = await this.driver
       .getElementAttribute(id, this.platform === "ios" ? "value" : "text")
       .catch(() => null);
     return { focused: true, ...(typeof value === "string" ? { value } : {}) };
+  }
+
+  /**
+   * iOS: XCTest types through the keyboard, and keys sent while it is still sliding in can get
+   * lost (only "A" of "Ayse" arrived on a GitHub runner). When the field then holds exactly its
+   * old value plus the start of the text, the missing rest is typed once more. Any other value
+   * (masked or secure fields, formatters, length limits) is left alone, so nothing is typed twice.
+   */
+  private async typeIos(elementId: string, text: string) {
+    const before = (await this.fieldValue(elementId)) ?? "";
+    await this.driver.elementSendKeys(elementId, text);
+    if (/[\n\t]/.test(text)) return; // a newline may have submitted or moved focus
+    const after = (await this.fieldValue(elementId)) ?? "";
+    if (after === before + text) return;
+    for (let k = text.length - 1; k >= 0; k--) {
+      if (after === before + text.slice(0, k)) {
+        await this.driver.elementSendKeys(elementId, text.slice(k));
+        return;
+      }
+    }
   }
 
   /**
