@@ -23,6 +23,7 @@ import {
   type StoredEvent,
   TERMINAL_STATES,
 } from "./store.js";
+import type { Recording } from "./tests.js";
 
 export class SessionError extends Error {
   constructor(
@@ -77,6 +78,12 @@ export class HubSession {
   lastActivity = Date.now();
   disconnectedAt: number | null = null;
   progress: string[] = [];
+  /** Things the agent must hear about at its next tool call (late command outcomes, recovery). */
+  notices: string[] = [];
+  /** Test being recorded from the agent's actions on this session (test_record). */
+  recording: Recording | null = null;
+  /** Set while a test run drives the device (other actions are refused). */
+  busyWith: string | null = null;
   agentImageSeq = 0;
   /** Set when a stop was requested; the runner's goodbye then ends the session as closed. */
   stopReason: string | null = null;
@@ -282,8 +289,21 @@ export class HubSession {
         return;
       case "event":
         this.note(msg.message);
+        if (/session replaced|session restored/i.test(msg.message)) {
+          this.actionSeq += 1;
+          this.notices.push(`Device: ${msg.message}`);
+        }
         await this.event({ kind: "runner", level: msg.level, message: msg.message });
         return;
+      case "late": {
+        // The screen may have changed after the agent was told the command timed out.
+        this.actionSeq += 1;
+        const text = `An earlier ${msg.name} that timed out ${msg.outcome === "completed" ? "completed" : msg.outcome === "failed" ? `failed (${msg.error ?? "error"})` : "was abandoned with its device session"} ${Math.round(msg.lateByMs / 1000)} s after its timeout; the screen may have changed since — look again before acting.`;
+        this.notices.push(text);
+        this.note(text);
+        await this.event({ kind: "runner", level: "warn", message: text });
+        return;
+      }
       case "bye":
         this.note(`runner: ${msg.reason}`);
         this.stopReason ??= `runner stopped: ${msg.reason}`;
@@ -335,8 +355,9 @@ export class HubSession {
   command<N extends CommandName>(
     name: N,
     args: object,
-    timeoutMs = 30_000,
+    requestedTimeoutMs = 30_000,
   ): Promise<CommandOutcome<N>> {
+    const timeoutMs = Math.max(1_000, Math.round(requestedTimeoutMs * this.config.timeoutFactor));
     if (!this.active) {
       return Promise.reject(new SessionError("session_closed", `session is ${this.record.state}`));
     }

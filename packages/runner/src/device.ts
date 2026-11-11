@@ -28,14 +28,9 @@ const ELEMENT_KEY = "element-6066-11e4-a52e-4f735466cecf";
 /** Text the US on-screen keyboard can type directly (printable ASCII, newline, tab). */
 const PLAIN_TYPABLE = /^[\x20-\x7e\n\t]*$/;
 
-export class DeviceError extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-  ) {
-    super(message);
-  }
-}
+import { DeviceError } from "./errors.js";
+
+export { DeviceError };
 
 function finger(id: string, actions: object[]): Pointer {
   return { type: "pointer", id, parameters: { pointerType: "touch" }, actions };
@@ -47,7 +42,7 @@ export class DeviceController {
   private constructor(
     readonly platform: Platform,
     readonly driver: Browser,
-    readonly options: SessionOptions,
+    readonly options: SessionOptions & { appiumUrl: string },
     readonly appId: string,
   ) {}
 
@@ -75,6 +70,10 @@ export class DeviceController {
       throw new Error("the driver did not report the app id of the build");
     }
     const device = new DeviceController(options.platform, driver, options, appId);
+    if (options.platform === "ios" && options.keepAppData) {
+      // A replacement session: bring the running app to the front as it is (no relaunch).
+      await driver.activateApp(appId).catch(() => undefined);
+    }
     if (options.platform === "android") {
       // Animations stay on (they are under test); only the idle wait is shortened so an animated
       // screen does not hold every command for 10 s.
@@ -90,6 +89,11 @@ export class DeviceController {
   setIosLaunchArguments(group: string, args: string[]) {
     if (args.length > 0) this.launchArgGroups.set(group, args);
     else this.launchArgGroups.delete(group);
+  }
+
+  /** Keeps the launch arguments of the session this one replaces. */
+  copyLaunchArgumentsFrom(other: DeviceController) {
+    for (const [group, args] of other.launchArgGroups) this.launchArgGroups.set(group, args);
   }
 
   private get launchArgs(): string[] {
@@ -114,6 +118,24 @@ export class DeviceController {
 
   async close(): Promise<void> {
     await this.driver.deleteSession();
+  }
+
+  /**
+   * Ends the Appium session with a plain HTTP request and a short deadline, bypassing
+   * WebdriverIO (whose own request for a stuck command may still be pending). Deleting the
+   * session makes the driver drop whatever it was executing.
+   */
+  async forceClose(timeoutMs = 20_000): Promise<boolean> {
+    const base = this.options.appiumUrl.replace(/\/$/, "");
+    try {
+      const res = await fetch(`${base}/session/${this.driver.sessionId}`, {
+        method: "DELETE",
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
   }
 
   // ---- Observation ------------------------------------------------------------------------

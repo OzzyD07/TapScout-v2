@@ -21,9 +21,11 @@ function gridStep(span: number): number {
   return 250;
 }
 
-interface Mark {
+export interface Mark {
   label: string;
   rect: Rect;
+  /** Box colour (default magenta). */
+  color?: string;
 }
 
 /** Overlay: optional grid every `grid` units and numbered element boxes (view units). */
@@ -52,9 +54,11 @@ function overlaySvg(width: number, height: number, marks: Mark[], grid: number |
     const tw = 7 * m.label.length + 6;
     const ty = y >= 14 ? y - 14 : y;
     parts.push(
-      `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="#ff2d95" stroke-width="2"/>`,
+      `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="${m.color ?? "#ff2d95"}" stroke-width="2"/>`,
     );
-    parts.push(`<rect x="${x}" y="${ty}" width="${tw}" height="14" fill="#ff2d95"/>`);
+    parts.push(
+      `<rect x="${x}" y="${ty}" width="${tw}" height="14" fill="${m.color ?? "#ff2d95"}"/>`,
+    );
     parts.push(
       `<text x="${x + 3}" y="${ty + 11}" font-size="11" font-weight="bold" fill="#fff">${esc(m.label)}</text>`,
     );

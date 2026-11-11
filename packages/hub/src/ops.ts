@@ -100,9 +100,15 @@ export class DeviceOps {
 
   /** A command that may change the screen: invalidates element refs. */
   async act<N extends CommandName>(name: N, args: CommandArgs<N>, timeoutMs = 30_000) {
-    const out = await this.command(name, args, timeoutMs);
-    this.s.actionSeq += 1;
-    return out;
+    try {
+      const out = await this.command(name, args, timeoutMs);
+      this.s.actionSeq += 1;
+      return out;
+    } catch (error) {
+      // A timed-out action may still land: element refs read before it cannot be trusted.
+      if (error instanceof SessionError && error.code === "timeout") this.s.actionSeq += 1;
+      throw error;
+    }
   }
 
   // ---- Observation ---------------------------------------------------------------------
@@ -297,11 +303,38 @@ export class DeviceOps {
   }
 
   /** A view point from x/y or an element spec (centre of the element, or a point inside it). */
-  async point(a: { x?: number; y?: number; element?: string; offset?: { x: number; y: number } }) {
+  /**
+   * The element (or bare point) each target slot resolved to, noted before the action runs: a
+   * test recording turns it into a portable target.
+   */
+  readonly resolved: Record<string, { el: UiElement | null; point: Point; tree: UiTree | null }> =
+    {};
+
+  /** The smallest tappable element under a view point in the latest UI tree, if any. */
+  elementAt(p: Point): UiElement | null {
+    const tree = this.s.lastTree?.tree;
+    if (!tree || !this.s.transform) return null;
+    const t = this.s.transform;
+    const hits = tree.elements.filter((e) => {
+      if (!(e.clickable || e.role === "text_field")) return false;
+      const r = pxToView(t, e.bounds);
+      return p.x >= r.x && p.y >= r.y && p.x < r.x + r.width && p.y < r.y + r.height;
+    });
+    return (
+      hits.sort((a, b) => a.bounds.width * a.bounds.height - b.bounds.width * b.bounds.height)[0] ??
+      null
+    );
+  }
+
+  async point(
+    a: { x?: number; y?: number; element?: string; offset?: { x: number; y: number } },
+    slot = "main",
+  ) {
     if (a.element) {
       const r = await this.resolveElement(a.element);
       const c = center(r.rect);
       const p = a.offset ? { x: r.rect.x + a.offset.x, y: r.rect.y + a.offset.y } : c;
+      this.resolved[slot] = { el: r.element, point: p, tree: this.s.lastTree?.tree ?? null };
       return {
         point: p,
         label: `${r.element.ref} ${r.element.role} "${r.element.label ?? r.element.text ?? r.element.stableId ?? ""}"${r.note}`,
@@ -318,12 +351,25 @@ export class DeviceOps {
         `(${a.x}, ${a.y}) is outside the screen ${t.viewWidth}×${t.viewHeight}`,
       );
     }
+    this.resolved[slot] = {
+      el: this.elementAt({ x: a.x, y: a.y }),
+      point: { x: a.x, y: a.y },
+      tree: this.s.lastTree?.tree ?? null,
+    };
     return { point: { x: a.x, y: a.y }, label: `(${a.x}, ${a.y})`, rect: null as Rect | null };
   }
 
   /** Scroll region in view units: an element, a rect, or the middle of the screen. */
   async region(a: { element?: string; region?: Rect }): Promise<Rect> {
-    if (a.element) return (await this.resolveElement(a.element)).rect;
+    if (a.element) {
+      const r = await this.resolveElement(a.element);
+      this.resolved.main = {
+        el: r.element,
+        point: center(r.rect),
+        tree: this.s.lastTree?.tree ?? null,
+      };
+      return r.rect;
+    }
     if (a.region) {
       const r = clipViewRect(this.t, a.region);
       if (!r) throw new SessionError("out_of_screen", "the region is outside the screen");

@@ -19,7 +19,17 @@ import {
   type RunnerConfig,
   type StreamSettings,
 } from "@tapscout/shared";
-import { recoverEmulator } from "./android.js";
+import { adb, recoverEmulator } from "./android.js";
+
+/** px per dp from `wm density` (an override wins over the physical density). */
+async function androidDensityScale(): Promise<number | undefined> {
+  const out = await adb(["shell", "wm", "density"], 10_000).catch(() => "");
+  const dpi = Number(
+    /Override density:\s*(\d+)/.exec(out)?.[1] ?? /Physical density:\s*(\d+)/.exec(out)?.[1],
+  );
+  return dpi > 0 ? Math.round((dpi / 160) * 1000) / 1000 : undefined;
+}
+
 import { installRejection, simulatorPlatformProblem } from "./build-check.js";
 import { fetchGithubOidcToken, HubConnection, HubRejected } from "./connection.js";
 import { DeviceController, DeviceError } from "./device.js";
@@ -161,7 +171,7 @@ async function handle(msg: HubMessage) {
         return;
       }
       try {
-        const out = await session.execute(msg.name, msg.args, msg.timeoutMs);
+        const out = await session.execute(msg.id, msg.name, msg.args, msg.timeoutMs);
         if (out.payload) {
           conn.sendBinary({ t: "res", id: msg.id, ok: true, data: out.data }, out.payload);
         } else {
@@ -204,6 +214,8 @@ async function prepare(w: Extract<HubMessage, { t: "welcome" }>) {
   let executable: string | undefined;
   // XCUITest does not report the bundle id of an installed .app; Info.plist has it.
   let bundleId: string | undefined;
+  let appVersion: string | undefined;
+  let appBuild: string | undefined;
   if (platform === "ios") {
     const unpacked = join(buildDir, "unpacked");
     execFileSync("ditto", ["-x", "-k", buildFile, unpacked]);
@@ -226,7 +238,14 @@ async function prepare(w: Extract<HubMessage, { t: "welcome" }>) {
           "-",
           join(appPath, "Info.plist"),
         ]).toString("utf8"),
-      ) as { CFBundleExecutable?: string; CFBundleIdentifier?: string };
+      ) as {
+        CFBundleExecutable?: string;
+        CFBundleIdentifier?: string;
+        CFBundleShortVersionString?: string;
+        CFBundleVersion?: string;
+      };
+      appVersion = plist.CFBundleShortVersionString;
+      appBuild = plist.CFBundleVersion;
       executable = plist.CFBundleExecutable;
       bundleId = plist.CFBundleIdentifier;
       const problem = simulatorPlatformProblem(plist);
@@ -309,6 +328,19 @@ async function prepare(w: Extract<HubMessage, { t: "welcome" }>) {
     screenshotWidth: size.width,
     screenshotHeight: size.height,
     pixelsPerUnit: Math.round(pixelsPerUnit * 1000) / 1000,
+    densityScale:
+      platform === "android"
+        ? await androidDensityScale()
+        : Math.round(pixelsPerUnit * 1000) / 1000,
+    ...(await (async () => {
+      if (platform === "ios") {
+        return { ...(appVersion ? { appVersion } : {}), ...(appBuild ? { appBuild } : {}) };
+      }
+      const pkg = await adb(["shell", "dumpsys", "package", device.appId], 20_000).catch(() => "");
+      const name = /versionName=(\S+)/.exec(pkg)?.[1];
+      const code = /versionCode=(\d+)/.exec(pkg)?.[1];
+      return { ...(name ? { appVersion: name } : {}), ...(code ? { appBuild: code } : {}) };
+    })()),
     orientation: size.width > size.height ? "landscape" : "portrait",
     automation: {
       appium: process.env.APPIUM_VERSION ?? "unknown",
@@ -358,6 +390,10 @@ async function prepare(w: Extract<HubMessage, { t: "welcome" }>) {
     },
     log,
     event,
+    late: (o) => {
+      conn.send({ t: "late", ...o });
+      log(`late ${o.outcome}: ${o.name} after ${Math.round(o.durationMs / 1000)} s`);
+    },
   });
   conn.send({ t: "ready", device: info });
   log(`ready: ${platform} ${info.osVersion} ${info.deviceName}, ${size.width}x${size.height}`);

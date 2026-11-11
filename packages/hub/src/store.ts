@@ -84,7 +84,10 @@ export type SessionEvent =
   | { kind: "runner"; level: "info" | "warn" | "error"; message: string }
   | { kind: "finding"; id: string; title: string; severity: string }
   | { kind: "evidence"; id: string; label: string }
-  | { kind: "file"; name: string; sizeBytes: number };
+  | { kind: "file"; name: string; sizeBytes: number }
+  | { kind: "audit"; file: string; issues: number; title: string }
+  | { kind: "perf"; mode: string; file: string; summary: string }
+  | { kind: "test"; message: string; runId?: string };
 
 export type StoredEvent = SessionEvent & { ts: string; seq: number };
 

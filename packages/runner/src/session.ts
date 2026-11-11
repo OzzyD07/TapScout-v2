@@ -1,6 +1,7 @@
 // Executes hub commands on one device. Device commands run one at a time in arrival order;
 // log and crash queries do not wait for them.
 
+import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -10,6 +11,7 @@ import {
   type CrashReport,
   type DeviceInfo,
   type FramePart,
+  type PerfReport,
   pngSize,
   type RunnerAction,
   type StreamSettings,
@@ -38,6 +40,21 @@ import {
 } from "./frames.js";
 import { iosCrashReports, SimctlRecord, simctlScreenshot } from "./ios.js";
 import type { LogCapture } from "./logs.js";
+import {
+  androidLaunch,
+  appPid,
+  cpuSeconds,
+  frameDiff,
+  gfxRead,
+  gfxReset,
+  memory,
+  PERF_NOTE,
+  processStats,
+  sampleProcess,
+  visualTiming,
+  waitVisuallyReady,
+} from "./perf.js";
+import { CommandQueue, type LateOutcome, type RunningCommand } from "./queue.js";
 
 export interface CommandOutput {
   data: unknown;
@@ -56,6 +73,20 @@ export interface DeviceSessionDeps {
   onFrame: (frame: Frame) => void;
   log: (message: string) => void;
   event: (level: "info" | "warn" | "error", message: string) => void;
+  /** A command that timed out ended after all (or was abandoned with its session). */
+  late: (outcome: LateOutcome) => void;
+}
+
+/** Rejects with a timeout error when `task` takes longer than `timeoutMs` (read-only work). */
+function withDeadline<T>(task: Promise<T>, name: string, timeoutMs: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new DeviceError("timeout", `${name} took longer than ${timeoutMs} ms`)),
+      timeoutMs,
+    );
+  });
+  return Promise.race([task, deadline]).finally(() => clearTimeout(timer));
 }
 
 /** Appium errors after which the driver session is gone. */
@@ -70,7 +101,7 @@ export class DeviceSession {
   info: DeviceInfo;
   readonly stream: LiveStream;
   readonly startedAt = Date.now();
-  private queue: Promise<unknown> = Promise.resolve();
+  private readonly commands: CommandQueue;
   private recorder: AndroidScreenRecord | SimctlRecord | null = null;
   private recordingFile: string | null = null;
   private recordingName: string | null = null;
@@ -79,6 +110,14 @@ export class DeviceSession {
   constructor(private readonly deps: DeviceSessionDeps) {
     this.device = deps.device;
     this.info = deps.info;
+    this.commands = new CommandQueue(
+      {
+        onLate: (o) => deps.late(o),
+        onStuck: (c) => this.replaceStuckSession(c),
+      },
+      // Diagnostics knob; a command still running this long after its timeout is "stuck".
+      Number(process.env.TAPSCOUT_STUCK_AFTER_MS) || 30_000,
+    );
     const ios = this.info.platform === "ios";
     this.stream = new LiveStream({
       grab: () => this.grab(),
@@ -86,19 +125,16 @@ export class DeviceSession {
         ? {
             mjpeg: {
               url: `http://127.0.0.1:${deps.mjpegPort}`,
-              configure: (s) => this.enqueue(() => this.configureMjpeg(s)),
+              configure: (s) =>
+                this.commands.run(randomUUID(), "mjpeg_settings", 30_000, () =>
+                  this.configureMjpeg(s),
+                ),
             },
           }
         : {}),
       onFrame: deps.onFrame,
       log: deps.log,
     });
-  }
-
-  private enqueue<T>(fn: () => Promise<T>): Promise<T> {
-    const run = this.queue.then(fn, fn);
-    this.queue = run.catch(() => undefined);
-    return run;
   }
 
   /** A raw full-resolution screenshot without Appium (stream and fast captures). */
@@ -119,22 +155,81 @@ export class DeviceSession {
     });
   }
 
-  async execute(name: CommandName, args: unknown, timeoutMs: number): Promise<CommandOutput> {
-    const parallel = name === "logs" || name === "crashes" || name === "info";
+  async execute(
+    id: string,
+    name: CommandName,
+    args: unknown,
+    timeoutMs: number,
+  ): Promise<CommandOutput> {
     const run = () => this.withRecovery(name, () => this.dispatch(name, args));
-    const task = parallel ? run() : this.enqueue(run);
-    let timer: NodeJS.Timeout | undefined;
-    const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(
-        () => reject(new DeviceError("timeout", `${name} took longer than ${timeoutMs} ms`)),
+    // Read-only queries that do not use Appium run beside device commands.
+    const passiveMode = (args as { mode?: string } | null)?.mode;
+    if (
+      name === "logs" ||
+      name === "crashes" ||
+      name === "info" ||
+      (name === "perf" && (passiveMode === "snapshot" || passiveMode === "sample"))
+    ) {
+      return withDeadline(run(), name, timeoutMs);
+    }
+    // While the device is busy with a timed-out command, screenshots come from adb / simctl so
+    // the agent can still see what is happening.
+    if (name === "screenshot" && this.commands.busy) {
+      return withDeadline(
+        this.screenshotWithoutAppium(args as CommandArgs<"screenshot">),
+        name,
         timeoutMs,
       );
-    });
-    try {
-      return await Promise.race([task, timeout]);
-    } finally {
-      clearTimeout(timer);
     }
+    return this.commands.run(id, name, timeoutMs, run);
+  }
+
+  private async screenshotWithoutAppium(a: CommandArgs<"screenshot">): Promise<CommandOutput> {
+    const png = await this.grab();
+    const size = pngSize(png);
+    this.noteSize(size);
+    const payload =
+      a.format === "png"
+        ? png
+        : await sharp(png)
+            .jpeg({ quality: a.quality ?? 90 })
+            .toBuffer();
+    const data: CommandResult<"screenshot"> = {
+      width: size?.width ?? 0,
+      height: size?.height ?? 0,
+      capturedAt: Date.now(),
+      orientation: size && size.width > size.height ? "landscape" : "portrait",
+    };
+    return { data, payload };
+  }
+
+  /**
+   * A command still running long after its timeout: the Appium session is presumed wedged. It
+   * is deleted over plain HTTP (the driver drops the stuck call) and opened again with the app
+   * kept as it is; commands that were waiting are cancelled, never run.
+   */
+  private replaceStuckSession(command: RunningCommand) {
+    const secs = Math.round((Date.now() - command.startedAt) / 1000);
+    this.deps.event(
+      "warn",
+      `${command.name} is still running after ${secs} s (timed out); replacing the Appium session — the app keeps its data and state.`,
+    );
+    const old = this.device;
+    this.commands
+      .replace(async () => {
+        await old.forceClose();
+        if (this.info.platform === "android") await recoverEmulator();
+        const fresh = await this.deps.reopen();
+        fresh.copyLaunchArgumentsFrom(old);
+        this.device = fresh;
+        this.deps.event("info", "Device session replaced; take a fresh screenshot before acting.");
+      })
+      .catch((error) =>
+        this.deps.event(
+          "error",
+          `Could not replace the device session: ${(error as Error).message}`,
+        ),
+      );
   }
 
   /** A dead Appium session is replaced once (app data kept) and the command retried. */
@@ -149,7 +244,9 @@ export class DeviceSession {
       );
       await this.device.close().catch(() => undefined);
       if (this.info.platform === "android") await recoverEmulator();
+      const old = this.device;
       this.device = await this.deps.reopen();
+      this.device.copyLaunchArgumentsFrom(old);
       this.deps.event("info", "Device session restored; the app was kept with its data.");
       return fn();
     }
@@ -240,6 +337,8 @@ export class DeviceSession {
         this.info = { ...this.info, orientation };
         return { data: { orientation } };
       }
+      case "perf":
+        return { data: await this.perf(rawArgs as CommandArgs<"perf">) };
       case "info":
         return { data: this.info };
       case "logs":
@@ -351,6 +450,131 @@ export class DeviceSession {
       });
     }
     return { reports };
+  }
+
+  // ---- Performance -----------------------------------------------------------------------
+
+  private async perf(a: CommandArgs<"perf">): Promise<PerfReport> {
+    const android = this.info.platform === "android";
+    const appId = this.info.appId;
+    const udid = this.deps.udid;
+    const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(v, hi));
+    const report: PerfReport = {
+      mode: a.mode,
+      environment: android ? "android_emulator" : "ios_simulator",
+      notes: [PERF_NOTE],
+    };
+    switch (a.mode) {
+      case "snapshot": {
+        const p = await processStats(this.info, udid, 1_000);
+        if (p) report.process = p;
+        else report.notes.push("The app process is not running.");
+        return report;
+      }
+      case "sample": {
+        const s = await sampleProcess(
+          this.info,
+          udid,
+          clamp(a.durationMs ?? 10_000, 2_000, 30_000),
+          clamp(a.intervalMs ?? 1_000, 500, 5_000),
+        );
+        if (!s) {
+          report.notes.push("The app process is not running.");
+          return report;
+        }
+        report.samples = s.samples;
+        report.process = { pid: s.pid, ...(await memory(this.info, s.pid)) };
+        return report;
+      }
+      case "launch": {
+        const cold = a.cold ?? true;
+        if (android) {
+          const r = await androidLaunch(appId, cold);
+          const visualReadyMs = await waitVisuallyReady(() => this.grab(), r.started);
+          report.launch = {
+            kind: cold ? "cold" : "warm",
+            ...(r.totalTimeMs !== undefined ? { totalTimeMs: r.totalTimeMs } : {}),
+            ...(r.waitTimeMs !== undefined ? { waitTimeMs: r.waitTimeMs } : {}),
+            ...(r.launchState ? { launchState: r.launchState } : {}),
+            ...(visualReadyMs !== undefined ? { visualReadyMs } : {}),
+          };
+          this.deps.logs?.trackPid(await pidOf(appId));
+        } else {
+          if (cold) await this.device.driver.terminateApp(appId).catch(() => undefined);
+          else await this.device.driver.execute("mobile: pressButton", { name: "home" });
+          await sleep(1_000);
+          const started = Date.now();
+          await this.device.launch();
+          const totalTimeMs = Date.now() - started;
+          const visualReadyMs = await waitVisuallyReady(() => this.grab(), started);
+          report.launch = {
+            kind: cold ? "cold" : "warm",
+            totalTimeMs,
+            ...(visualReadyMs !== undefined ? { visualReadyMs } : {}),
+          };
+          report.notes.push(
+            "iOS start time is XCTest's launch call (it returns when the app is idle); XCTest performance metrics (XCTMetric) need a UI-test bundle and are not available here.",
+          );
+        }
+        return report;
+      }
+      case "action": {
+        if (!a.action) throw new DeviceError("bad_args", "an action measurement needs an action");
+        const pid = await appPid(this.info, udid);
+        if (android) await gfxReset(appId);
+        const c0 = pid ? await cpuSeconds(this.info, pid) : undefined;
+        const t0 = Date.now();
+        // 50 fps over ≤2.5 s (+ pre-roll) stays within the 150 frames a capture keeps.
+        const out = await this.captureFrames({
+          durationMs: clamp(a.durationMs ?? 2_000, 800, 2_500),
+          fps: 50,
+          maxEdge: 240,
+          quality: 45,
+          action: a.action,
+          actionDelayMs: 300,
+        });
+        const c1 = pid ? await cpuSeconds(this.info, pid) : undefined;
+        const elapsed = (Date.now() - t0) / 1000;
+        const data = out.data as CommandResult<"capture_frames">;
+        const payload = out.payload ?? Buffer.alloc(0);
+        const frames = data.frames.map((f) => ({
+          at: f.capturedAt,
+          img: payload.subarray(f.offset, f.offset + f.length),
+        }));
+        const diffs: number[] = [0];
+        for (let i = 1; i < frames.length; i++) {
+          diffs.push(await frameDiff(frames[i - 1]?.img as Buffer, frames[i]?.img as Buffer));
+        }
+        report.visual = visualTiming(
+          frames.map((f) => f.at),
+          diffs,
+          data.actionAt ?? data.startedAt,
+          data.method,
+        );
+        if (data.method !== "video") {
+          report.notes.push(
+            `Frames came from ${data.method === "mjpeg" ? "WDA's MJPEG stream" : "screenshot polling"}: visual fps is capped by that source, not by the app.`,
+          );
+        }
+        if (android) {
+          const gfx = await gfxRead(appId);
+          if (gfx) report.frames = gfx;
+        }
+        if (pid) {
+          report.process = { pid, ...(await memory(this.info, pid)) };
+          if (c0 !== undefined && c1 !== undefined && elapsed > 0) {
+            report.process.cpuPercent = Math.round(((c1 - c0) / elapsed) * 1000) / 10;
+          }
+        }
+        report.action = {
+          ...(data.actionAt && data.actionDoneAt
+            ? { actionMs: data.actionDoneAt - data.actionAt }
+            : {}),
+          ...(data.actionError ? { error: data.actionError } : {}),
+        };
+        return report;
+      }
+    }
   }
 
   // ---- Frames and recordings -------------------------------------------------------------

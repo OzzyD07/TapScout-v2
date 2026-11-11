@@ -64,7 +64,9 @@ async function home() {
       <p class="small muted">Oturumları normalde MCP'ye bağlı ajan başlatır; bu form elle denemek içindir.</p>
       <p id="formerr" class="small" style="color:var(--bad)"></p>
     </section>
-    <section class="panel"><h2>Oturumlar</h2><div id="list" class="muted">yükleniyor…</div></section>`;
+    <section class="panel"><h2>Oturumlar</h2><div id="list" class="muted">yükleniyor…</div></section>
+    <section class="panel"><h2>Testler ve regresyon</h2><div id="tests" class="muted">yükleniyor…</div></section>`;
+  renderTests();
   document.getElementById("new").addEventListener("submit", async (e) => {
     e.preventDefault();
     const f = new FormData(e.target);
@@ -330,11 +332,99 @@ async function sessionPage(id) {
   });
 }
 
+// ---- Tests ----------------------------------------------------------------------------
+
+const RESULT_TR = { passed: "geçti", failed: "başarısız", error: "hata", skipped: "atlandı" };
+const CLASS_TR = {
+  regression: "REGRESYON",
+  fixed: "düzeldi",
+  still_failing: "hâlâ hatalı",
+  stable: "kararlı",
+  new: "yeni",
+};
+const buildText = (b) =>
+  `${b.appVersion ? `v${b.appVersion}${b.appBuild ? ` (${b.appBuild})` : ""} ` : ""}${b.sha256.slice(0, 8)}`;
+const resultChip = (t) =>
+  `<span class="chip ${t.status === "passed" ? "ready" : t.status === "skipped" ? "" : "failed"}">${esc(RESULT_TR[t.status] ?? t.status)}</span>${
+    t.classification && t.classification !== "new" && t.classification !== "stable"
+      ? ` <span class="chip ${t.classification === "regression" ? "failed" : "ready"}">${esc(CLASS_TR[t.classification])}</span>`
+      : ""
+  }`;
+
+async function renderTests() {
+  const el = document.getElementById("tests");
+  if (!el) return;
+  const { tests, runs } = await api("/api/tests").catch(() => ({ tests: [], runs: [] }));
+  if (!tests.length && !runs.length) {
+    el.innerHTML =
+      "Henüz test yok. Ajan bir akışı <code>test_record</code> ile kaydedince burada görünür.";
+    return;
+  }
+  el.innerHTML = `
+    <h3>Testler</h3>
+    <table><tr><th>Test</th><th>Platform</th><th>Adım</th><th>Sürüm</th></tr>${tests
+      .map(
+        (t) =>
+          `<tr><td><b>${esc(t.name)}</b><div class="small muted">${esc(t.id)}</div></td><td>${esc(t.platforms.join(", "))}</td><td>${t.steps.length}</td><td>v${t.version}</td></tr>`,
+      )
+      .join("")}</table>
+    <h3>Son çalıştırmalar</h3>
+    <table><tr><th>Çalıştırma</th><th>Platform</th><th>Build</th><th>Sonuç</th></tr>${runs
+      .map((r) => {
+        const passed = r.tests.filter((t) => t.status === "passed").length;
+        const reg = r.tests.filter((t) => t.classification === "regression").length;
+        return `<tr><td><a href="#/r/${r.id}">${esc(new Date(r.startedAt).toLocaleString())}</a></td><td>${esc(r.platform)}</td><td class="small">${esc(buildText(r.build))}</td><td>${passed}/${r.tests.length} geçti${reg ? ` <span class="chip failed">${reg} regresyon</span>` : ""}${r.state === "running" ? ' <span class="chip">sürüyor</span>' : ""}</td></tr>`;
+      })
+      .join("")}</table>`;
+}
+
+async function runPage(id) {
+  let run;
+  try {
+    run = await api(`/api/test-runs/${id}`);
+  } catch (e) {
+    $app.innerHTML = `<p>${esc(e.message)}</p>`;
+    return;
+  }
+  const file = (rel) => `/files/${run.sessionId}/${rel}`;
+  $app.innerHTML = `
+    <section class="panel">
+      <h2>Test çalıştırması · ${esc(run.platform)} · build ${esc(buildText(run.build))}</h2>
+      <p class="small muted">${esc(run.device ?? "")} · ${esc(run.build.fileName)} · ${esc(new Date(run.startedAt).toLocaleString())} · <a href="#/s/${run.sessionId}">oturum</a></p>
+      ${run.tests
+        .map(
+          (t) => `<div class="finding ${t.status === "passed" ? "low" : "high"}">
+            <b>${esc(t.testName)}</b> <span class="small muted">${esc(t.testId)} v${t.testVersion} · ${(t.durationMs / 1000).toFixed(1)} sn</span> ${resultChip(t)}
+            ${t.previous ? `<div class="small muted">önceki build ${esc(t.previous.build)}: ${esc(RESULT_TR[t.previous.status] ?? t.previous.status)}</div>` : ""}
+            ${t.message ? `<p class="small">${esc(t.message)}</p>` : ""}
+            <ol class="small">${t.steps.map((s) => `<li class="${s.status === "passed" ? "" : "err"}">${esc(s.label)} — ${esc(s.status)}${s.message ? `: ${esc(s.message)}` : ""}</li>`).join("")}</ol>
+            <div class="seen">${t.evidence
+              .filter((e) => /\.jpe?g$/.test(e))
+              .map(
+                (e) =>
+                  `<figure><a href="${file(e)}" target="_blank"><img src="${file(e)}"></a><figcaption>${esc(e.split("/").pop())}</figcaption></figure>`,
+              )
+              .join("")}</div>
+            ${t.evidence
+              .filter((e) => !/\.jpe?g$/.test(e))
+              .map(
+                (e) =>
+                  `<a class="small" href="${file(e)}" target="_blank">${esc(e.split("/").pop())}</a> `,
+              )
+              .join("")}
+          </div>`,
+        )
+        .join("")}
+    </section>`;
+}
+
 function route() {
   for (const fn of cleanup) fn();
   cleanup = [];
   const m = /^#\/s\/([0-9a-f-]{36})/.exec(location.hash);
+  const r = /^#\/r\/([0-9a-f-]{36})/.exec(location.hash);
   if (m) sessionPage(m[1]);
+  else if (r) runPage(r[1]);
   else home();
 }
 

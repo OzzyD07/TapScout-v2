@@ -29,6 +29,8 @@ export interface HubConfig {
   stream: { backgroundFps: number; viewerFps: number; maxEdge: number; quality: number };
   ringSeconds: number;
   reconnectGraceSeconds: number;
+  /** Diagnostics: scales every device command deadline (1 = normal). */
+  timeoutFactor: number;
 }
 
 const num = (v: string | undefined, d: number) => {
@@ -84,5 +86,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): HubConfig {
     },
     ringSeconds: num(env.TAPSCOUT_RING_SECONDS, 30),
     reconnectGraceSeconds: num(env.TAPSCOUT_RECONNECT_GRACE_SECONDS, 600),
+    timeoutFactor: Math.max(0.05, num(env.TAPSCOUT_TIMEOUT_FACTOR, 1)),
   };
 }

@@ -43,6 +43,8 @@ class FakeRunner {
   welcome: Extract<HubMessage, { t: "welcome" }> | null = null;
   shutdown: string | null = null;
   buildBytes = 0;
+  /** Page source the fake device answers with (screen switches in tests). */
+  source = SOURCE;
 
   constructor(
     private readonly gateway: string,
@@ -140,7 +142,17 @@ class FakeRunner {
         return;
       }
       case "source":
-        return ok({ xml: SOURCE, capturedAt: Date.now() });
+        return ok({ xml: this.source, capturedAt: Date.now() });
+      case "perf":
+        return ok({
+          mode: args.mode,
+          environment: "android_emulator",
+          process: { pid: 123, cpuPercent: 12.5, rssMb: 210, pssMb: 98.4 },
+          ...(args.mode === "launch"
+            ? { launch: { kind: "cold", totalTimeMs: 812, visualReadyMs: 1400 } }
+            : {}),
+          notes: ["emulator"],
+        });
       case "keyboard":
         return ok({ shown: false });
       case "logs":
@@ -442,4 +454,107 @@ describe("hub end to end", () => {
     await manager.stop(s.id, "test done", 5_000);
     expect(s.record.state).toBe("closed");
   }, 20_000);
+});
+
+describe("quality, tests and regressions", () => {
+  const WELCOME = readFileSync(
+    new URL("../../shared/test/fixtures/android-welcome.xml", import.meta.url),
+    "utf8",
+  );
+
+  async function readySession(label: string, bytes: number, source: string) {
+    const file = join(tmpdir(), `tapscout-${label}.apk`);
+    await writeFile(file, Buffer.alloc(bytes, bytes % 251));
+    const s = await manager.create({
+      platform: "android",
+      buildPath: file,
+      target: "local",
+      launch: false,
+      label,
+    });
+    await s.waitFor(() => s.record.state === "waiting_for_runner", 5_000);
+    const runner = new FakeRunner(gatewayUrl, s.id);
+    runner.source = source;
+    await runner.connect(manager.localToken(s.id) as string);
+    await s.waitFor(() => s.ready, 5_000);
+    return { s, runner };
+  }
+
+  it("records a test, replays it and flags a regression on another build", async () => {
+    const client = new Client({ name: "test-agent-2", version: "1" });
+    await client.connect(new StreamableHTTPClientTransport(new URL(`${uiUrl}/mcp`)));
+    const call = async (name: string, args: Record<string, unknown>) => {
+      const r = await client.callTool({ name, arguments: args });
+      return {
+        text: (r.content as { type: string; text?: string }[]).map((c) => c.text ?? "").join("\n"),
+        error: r.isError === true,
+        content: r.content,
+      };
+    };
+
+    const good = await readySession("build-good", 5000, SOURCE);
+    const sid = good.s.id;
+
+    // A late completion of a timed-out command is announced at the next tool call.
+    good.runner.send({
+      t: "late",
+      id: "x",
+      name: "tap",
+      outcome: "completed",
+      durationMs: 41_000,
+      lateByMs: 11_000,
+    });
+    await new Promise((r) => setTimeout(r, 100));
+    const next = await call("session_status", { session_id: sid });
+    expect(next.text).toMatch(/⚠ An earlier tap that timed out completed 11 s after its timeout/);
+
+    // Performance and visual audit.
+    const perf = await call("device_performance", { session_id: sid, mode: "launch" });
+    expect(perf.text).toMatch(/Cold start: 812 ms/);
+    expect(perf.text).toMatch(/PSS 98.4 MB/);
+    const audit = await call("device_visual_audit", { session_id: sid });
+    expect(audit.text).toMatch(/Visual audit of "Create profile"/);
+    expect((audit.content as { type: string }[]).some((c) => c.type === "image")).toBe(true);
+
+    // Record: tap Continue (by element), expect the name field; stop saves the test.
+    expect(
+      (await call("test_record", { session_id: sid, action: "start", name: "Register flow" })).text,
+    ).toMatch(/Recording/);
+    const tap = await call("device_tap", {
+      session_id: sid,
+      element: "id:register-continue",
+      observe: "none",
+    });
+    expect(tap.text).toMatch(/recorded as step 1: tap #register-continue/);
+    const exp = await call("test_expect", {
+      session_id: sid,
+      expect: "visible",
+      element: "id:register-name",
+    });
+    expect(exp.text).toMatch(/Step 2: expect visible #register-name — holds now ✓/);
+    const saved = await call("test_record", { session_id: sid, action: "stop" });
+    expect(saved.text).toMatch(/Saved test "register-flow" v1: 2 steps, 1 expectations/);
+
+    // While tests run, actions on that session are refused.
+    const run1 = await call("test_run", { session_ids: [sid], wait_seconds: 30 });
+    expect(run1.text).toMatch(/✓ register-flow \(v1\) passed \[new: no earlier build\]/);
+
+    // A new build whose screen lost the field: the same test fails and is a regression.
+    const bad = await readySession("build-bad", 6000, WELCOME);
+    const run2 = await call("test_run", { session_ids: [bad.s.id], wait_seconds: 40 });
+    expect(run2.text).toMatch(/✗ register-flow \(v1\) failed \[REGRESSION vs/);
+    expect(run2.text).toMatch(/evidence: .*screen\.jpg/);
+    const cmp = await call("test_compare", { platform: "android" });
+    expect(cmp.text).toMatch(/register-flow: ✓ {2}✗ {3}REGRESSION in \[2\]/);
+
+    // Editing a test raises its version.
+    const json = JSON.parse((await call("test_get", { test_id: "register-flow" })).text);
+    json.steps[1].timeout_ms = 1000;
+    const { version: _v, createdAt: _c, updatedAt: _u, recordedOn: _r, appId: _a, ...input } = json;
+    expect((await call("test_save", { test: input })).text).toMatch(/Saved register-flow v2/);
+
+    await manager.stop(sid, "done", 5_000);
+    await manager.stop(bad.s.id, "done", 5_000);
+    await client.close();
+  }, 60_000);
 });

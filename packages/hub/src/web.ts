@@ -17,6 +17,7 @@ import { createMcpServer } from "./mcp.js";
 import { DeviceOps } from "./ops.js";
 import { buildReport } from "./report.js";
 import { type HubSession, type LiveFrame, SessionError } from "./session.js";
+import { testStore } from "./tools-tests.js";
 import type { Tunnel } from "./tunnel.js";
 
 const TYPES: Record<string, string> = {
@@ -239,6 +240,17 @@ export function createWebServer(manager: SessionManager, tunnel: Tunnel, onShutd
           mcpUrl: `${uiUrl}/mcp`,
           dataDir: config.dataDir,
         });
+      }
+      if (path === "/api/tests" && req.method === "GET") {
+        const tests = testStore(config.dataDir);
+        return json(res, 200, {
+          tests: await tests.list(),
+          runs: (await tests.runs()).slice(0, 50),
+        });
+      }
+      const runMatch = /^\/api\/test-runs\/([0-9a-f-]{36})$/.exec(path);
+      if (runMatch && req.method === "GET") {
+        return json(res, 200, await testStore(config.dataDir).getRun(runMatch[1] as string));
       }
       if (path === "/api/sessions" && req.method === "GET") {
         return json(res, 200, manager.list().map(summary));

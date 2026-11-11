@@ -46,6 +46,11 @@ export interface DeviceInfo {
   screenshotHeight: number;
   /** Screenshot pixels per device unit: 1 on Android (px), the display scale on iOS (pt). */
   pixelsPerUnit: number;
+  /** Screenshot pixels per dp (Android) or pt (iOS): touch-target sizes are given in these. */
+  densityScale?: number;
+  /** versionName / CFBundleShortVersionString and versionCode / CFBundleVersion of the build. */
+  appVersion?: string;
+  appBuild?: string;
   orientation: "portrait" | "landscape";
   automation: { appium: string; driver: string; driverVersion: string };
   /** What the runner can do on this device; the hub reports unsupported tools instead of guessing. */
@@ -133,6 +138,8 @@ export interface CommandMap {
   alert: { args: { button: string }; result: Record<string, never> };
   /** Device environment: each given setting is applied and reported on its own. */
   env: { args: EnvArgs; result: { results: EnvResult[] } };
+  /** Performance measurements of the app under test (see PerfReport). */
+  perf: { args: PerfArgs; result: PerfReport };
   tap: {
     args: { x: number; y: number; count?: number; intervalMs?: number };
     result: Record<string, never>;
@@ -246,6 +253,81 @@ export interface EnvResult {
   message: string;
 }
 
+export interface PerfArgs {
+  /**
+   * snapshot: CPU over 1 s + memory now; sample: CPU/memory over a window; launch: cold or warm
+   * start time; action: an action's visual response, smoothness and (Android) frame timing.
+   */
+  mode: "snapshot" | "sample" | "launch" | "action";
+  durationMs?: number;
+  intervalMs?: number;
+  cold?: boolean;
+  action?: RunnerAction;
+}
+
+export interface ProcessStats {
+  pid: number;
+  /** Percent of one CPU core over the measured window. */
+  cpuPercent?: number;
+  rssMb?: number;
+  /** Android: proportional set size (the system's accounting of app memory). */
+  pssMb?: number;
+  javaHeapMb?: number;
+  nativeHeapMb?: number;
+  graphicsMb?: number;
+  threads?: number;
+}
+
+export interface FrameStats {
+  source: "gfxinfo";
+  totalFrames: number;
+  jankyFrames: number;
+  jankyPercent: number;
+  p50Ms?: number;
+  p90Ms?: number;
+  p95Ms?: number;
+  p99Ms?: number;
+  missedVsync?: number;
+  slowUiThread?: number;
+  slowBitmapUploads?: number;
+  slowDrawCommands?: number;
+  deadlineMissed?: number;
+  highInputLatency?: number;
+}
+
+export interface VisualTiming {
+  /** From the action to the first visible change of the screen. */
+  firstChangeMs?: number;
+  /** From the action to the last change (the screen is still afterwards). */
+  settledMs?: number;
+  /** Distinct frames per second while the screen was changing (screen video). */
+  visualFps?: number;
+  /** Longest pause between two changes during the transition: a visible hitch. */
+  longestGapMs?: number;
+  changedFrames: number;
+  method: "video" | "mjpeg" | "poll";
+}
+
+export interface PerfReport {
+  mode: PerfArgs["mode"];
+  environment: "android_emulator" | "ios_simulator";
+  process?: ProcessStats;
+  samples?: { atMs: number; cpuPercent: number; rssMb: number }[];
+  launch?: {
+    kind: "cold" | "warm";
+    /** Android `am start -W`: TotalTime / WaitTime / LaunchState. */
+    totalTimeMs?: number;
+    waitTimeMs?: number;
+    launchState?: string;
+    /** From the launch request until the screen stopped changing. */
+    visualReadyMs?: number;
+  };
+  frames?: FrameStats;
+  visual?: VisualTiming;
+  action?: { actionMs?: number; error?: string };
+  notes: string[];
+}
+
 export type LogLevel = "verbose" | "debug" | "info" | "warn" | "error" | "fatal";
 
 export interface CrashReport {
@@ -301,6 +383,16 @@ export type RunnerMessage =
   | { t: "res"; id: string; ok: false; error: { code: string; message: string } }
   | { t: "frame"; seq: number; capturedAt: number; width: number; height: number }
   | { t: "event"; level: "info" | "warn" | "error"; message: string }
+  /** A command whose caller already got "timeout" ended after all (or was abandoned). */
+  | {
+      t: "late";
+      id: string;
+      name: string;
+      outcome: "completed" | "failed" | "abandoned";
+      durationMs: number;
+      lateByMs: number;
+      error?: string;
+    }
   | { t: "bye"; reason: string }
   | { t: "ping"; at: number }
   | { t: "pong"; at: number };

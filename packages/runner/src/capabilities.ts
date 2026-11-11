@@ -60,6 +60,9 @@ export function buildCapabilities(options: SessionOptions): Record<string, unkno
     // Animated screens would otherwise hold every action for up to 10 s.
     "appium:waitForIdleTimeout": 3,
     "appium:mjpegServerPort": options.mjpegPort ?? 9100,
+    // A replacement session must not relaunch the app (XCUIApplication.launch restarts it and
+    // the screen the agent was on would be lost); open() activates it instead.
+    ...(options.keepAppData ? { "appium:autoLaunch": false } : {}),
     "appium:wdaLaunchTimeout": 600_000,
     "appium:wdaConnectionTimeout": 600_000,
     "appium:simulatorStartupTimeout": 300_000,

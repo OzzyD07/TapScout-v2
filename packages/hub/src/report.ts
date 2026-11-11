@@ -102,6 +102,34 @@ export async function buildReport(
   md.push("", `## Device files (${runnerFiles.length})`, "");
   for (const f of runnerFiles) md.push(`- [${f.rel}](${f.rel}) (${f.size} bytes)`);
   md.push("");
+  const audits = events.flatMap((e) => (e.kind === "audit" ? [e] : []));
+  if (audits.length) {
+    md.push(`## Visual audits (${audits.length})`, "");
+    for (const a of audits) {
+      md.push(
+        `- ${a.ts} · "${a.title}" · ${a.issues} candidates · [data](${a.file}) · [screen](${a.file.replace(/\.json$/, ".jpg")})`,
+      );
+    }
+    md.push("", "Audit candidates are hints; the findings above are the confirmed problems.", "");
+  }
+  const perf = events.flatMap((e) => (e.kind === "perf" ? [e] : []));
+  if (perf.length) {
+    md.push(`## Performance measurements (${perf.length})`, "");
+    for (const p of perf) md.push(`- ${p.ts} · ${p.mode} · ${p.summary} · [data](${p.file})`);
+    md.push(
+      "",
+      "Measured on an emulator/simulator: values are for comparing builds and screens.",
+      "",
+    );
+  }
+  const testEvents = events.flatMap((e) =>
+    e.kind === "test" && e.runId && /run (done|failed)/.test(e.message) ? [e] : [],
+  );
+  if (testEvents.length) {
+    md.push(`## Test runs (${testEvents.length})`, "");
+    for (const t of testEvents) md.push(`- ${t.ts} · ${t.message} · run \`${t.runId}\``);
+    md.push("");
+  }
   const markdown = md.join("\n");
 
   // HTML: the same content with images and links served by the local hub.
