@@ -480,13 +480,17 @@ export function registerTestTools({ tool, manager, fileUrl }: ToolKit) {
   tool(
     "test_results",
     "Results of a test run (waits up to wait_seconds while it is still running), with failed steps, evidence and regression classification.",
-    { run_id: z.string(), wait_seconds: z.number().int().min(0).max(45).default(0) },
+    {
+      run_id: z.string().describe("Run id (or its first characters)"),
+      wait_seconds: z.number().int().min(0).max(45).default(0),
+    },
     async (a) => {
-      const job = running.get(a.run_id);
+      const { id } = await tests.getRun(a.run_id);
+      const job = running.get(id);
       if (job && a.wait_seconds > 0) {
         await Promise.race([job, new Promise((r) => setTimeout(r, a.wait_seconds * 1000))]);
       }
-      return { text: formatRun(await tests.getRun(a.run_id), fileUrl), images: [] };
+      return { text: formatRun(await tests.getRun(id), fileUrl), images: [] };
     },
     { readOnly: true },
   );

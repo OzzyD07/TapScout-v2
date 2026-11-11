@@ -86,6 +86,17 @@ describe("capabilities", () => {
     expect(android["appium:autoLaunch"]).toBe(false);
     expect(Number(android["appium:newCommandTimeout"])).toBeGreaterThanOrEqual(1200);
   });
+
+  it("always installs the given build, except in a replacement session", () => {
+    for (const platform of ["android", "ios"] as const) {
+      const fresh = buildCapabilities({ platform, appPath: "/a" });
+      expect(fresh["appium:enforceAppInstall"]).toBe(true);
+      expect(fresh["appium:noReset"]).toBe(false);
+      const replacement = buildCapabilities({ platform, appPath: "/a", keepAppData: true });
+      expect(replacement["appium:enforceAppInstall"]).toBe(false);
+      expect(replacement["appium:noReset"]).toBe(true);
+    }
+  });
 });
 
 describe("iOS crash reports", () => {

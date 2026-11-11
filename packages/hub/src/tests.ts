@@ -325,8 +325,15 @@ export class TestStore {
     await rename(tmp, join(this.runsDir, `${run.id}.json`));
   }
 
+  /** A run by its id or the id's first characters (like session ids). */
   async getRun(id: string): Promise<TestRun> {
-    if (!/^[0-9a-f-]{36}$/.test(id)) throw new SessionError("bad_args", "invalid run id");
+    if (!/^[0-9a-f-]{4,36}$/.test(id)) throw new SessionError("bad_args", "invalid run id");
+    if (id.length < 36) {
+      const names = await readdir(this.runsDir).catch(() => [] as string[]);
+      const hits = names.filter((n) => n.startsWith(id) && n.endsWith(".json"));
+      if (hits.length > 1) throw new SessionError("bad_args", `run id ${id} is ambiguous`);
+      id = hits[0]?.slice(0, -5) ?? id;
+    }
     try {
       return JSON.parse(await readFile(join(this.runsDir, `${id}.json`), "utf8")) as TestRun;
     } catch {

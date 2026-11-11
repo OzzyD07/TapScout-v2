@@ -54,9 +54,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
       - name: Assemble release APK (x86_64)
         working-directory: apps/sample-app/android
-        # No build cache: the JS bundle task does not list EXPO_PUBLIC_APP_VARIANT as an input, so a
-        # cached bundle of another variant was reused (a "fixed" APK behaved like "seeded").
-        run: ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon --no-build-cache --stacktrace
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon --stacktrace
       - name: Collect APK
         run: |
           mkdir -p out

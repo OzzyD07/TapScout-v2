@@ -24,6 +24,11 @@ export function buildCapabilities(options: SessionOptions): Record<string, unkno
     "appium:app": options.appPath,
     "appium:newCommandTimeout": 1800,
     "appium:noReset": options.keepAppData ?? false,
+    // Appium skips installing a build whose version equals (or is lower than) the installed one,
+    // so a new build of the same version would silently test the old app (seen on a reused
+    // emulator: a "fixed" APK was never installed over the "seeded" one). A replacement session
+    // must keep the running app, so it does not reinstall.
+    "appium:enforceAppInstall": !(options.keepAppData ?? false),
     ...(options.udid ? { "appium:udid": options.udid } : {}),
   };
 
