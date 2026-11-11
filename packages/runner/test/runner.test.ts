@@ -4,8 +4,12 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { installRejection, simulatorPlatformProblem } from "../src/build-check.js";
 import { buildCapabilities } from "../src/capabilities.js";
+import { iosContentSize, iosLocaleArguments } from "../src/environment.js";
 import { summarizeIps } from "../src/ios.js";
 import { fromLogcat, fromOsLog, LogCapture } from "../src/logs.js";
+// Loaded while collecting (it pulls in webdriverio, sharp and ffmpeg): an import inside a test
+// counted against its 5 s timeout and failed under the load of a full `pnpm check`.
+import { appCrashLines } from "../src/session.js";
 
 describe("log lines", () => {
   it("reads logcat threadtime+epoch lines", () => {
@@ -128,7 +132,6 @@ describe("iOS crash reports", () => {
 
 describe("environment helpers", () => {
   it("maps text scale to iOS content size categories", async () => {
-    const { iosContentSize } = await import("../src/environment.js");
     expect(iosContentSize(1)).toBe("large");
     expect(iosContentSize(1.3)).toBe("extra-extra-extra-large");
     expect(iosContentSize(0.85)).toBe("small");
@@ -136,7 +139,6 @@ describe("environment helpers", () => {
   });
 
   it("turns BCP 47 tags into iOS launch arguments", async () => {
-    const { iosLocaleArguments } = await import("../src/environment.js");
     expect(iosLocaleArguments("tr-TR")).toEqual([
       "-AppleLanguages",
       "(tr)",
@@ -156,7 +158,6 @@ describe("environment helpers", () => {
 
 describe("android crash buffer", () => {
   it("keeps the app's crashes and drops other processes'", async () => {
-    const { appCrashLines } = await import("../src/session.js");
     const lines = [
       // A Google system app crashing natively on the emulator (seen during a recording).
       "1794403600.120  6815  6933 F libc    : Fatal signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x8 in tid 6933 (vkp-mediapipe-0), pid 6815 (ogle.android.as)",

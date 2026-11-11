@@ -520,20 +520,26 @@ export function registerTestTools({ tool, manager, fileUrl }: ToolKit) {
         const ids = a.test_ids ?? [...new Set(mine.flatMap((r) => r.tests.map((t) => t.testId)))];
         out.push(`${platform}: ${cols.map((c, i) => `[${i + 1}] ${c.label}`).join("  ")}`);
         for (const id of ids) {
+          // A build's latest passed/failed result; an error (TapScout could not perform a step)
+          // shows only when the build has nothing conclusive and is never compared.
           const cells = cols.map((c) => {
-            for (const r of [...c.runs].reverse()) {
-              const t = r.tests.find((x) => x.testId === id && x.status !== "skipped");
-              if (t) return t.status;
-            }
-            return null;
+            const results = [...c.runs]
+              .reverse()
+              .flatMap((r) => r.tests.filter((x) => x.testId === id && x.status !== "skipped"));
+            return (
+              results.find((t) => t.status === "passed" || t.status === "failed")?.status ??
+              results[0]?.status ??
+              null
+            );
           });
+          const conclusive = (s: string | null | undefined) => s === "passed" || s === "failed";
           const marks: string[] = [];
           for (let i = 1; i < cells.length; i++) {
-            const before = cells.slice(0, i).filter(Boolean).pop();
-            if (before === "passed" && cells[i] && cells[i] !== "passed")
-              marks.push(`REGRESSION in [${i + 1}]`);
-            if (before && before !== "passed" && cells[i] === "passed")
-              marks.push(`fixed in [${i + 1}]`);
+            const now = cells[i];
+            if (!conclusive(now)) continue;
+            const before = cells.slice(0, i).filter(conclusive).pop();
+            if (before === "passed" && now === "failed") marks.push(`REGRESSION in [${i + 1}]`);
+            if (before === "failed" && now === "passed") marks.push(`fixed in [${i + 1}]`);
           }
           out.push(
             `  ${id}: ${cells.map((c) => (c ? ICON[c] : "·")).join("  ")}${marks.length ? `   ${marks.join(", ")}` : ""}`,

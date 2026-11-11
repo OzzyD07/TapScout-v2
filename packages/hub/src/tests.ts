@@ -922,11 +922,15 @@ export function classify(
   run: TestRun,
   history: TestRun[],
 ): Pick<TestResult, "classification" | "previous"> {
-  if (result.status === "skipped") return {};
+  // An error means TapScout could not perform a step (device timeout, lost session): it says
+  // nothing about the app, so it is neither compared nor used as the earlier result.
+  if (result.status === "skipped" || result.status === "error") return {};
   for (const prev of history) {
     if (prev.id === run.id || prev.platform !== run.platform) continue;
     if (prev.build.sha256 === run.build.sha256) continue;
-    const r = prev.tests.find((x) => x.testId === result.testId && x.status !== "skipped");
+    const r = prev.tests.find(
+      (x) => x.testId === result.testId && x.status !== "skipped" && x.status !== "error",
+    );
     if (!r) continue;
     const passedBefore = r.status === "passed";
     const passedNow = result.status === "passed";

@@ -445,27 +445,33 @@ export class DeviceController {
    * driver's attempt, then the keyboard's own done/return keys, then the Return key (single-line
    * fields resign focus on submit). Nothing outside the keyboard is tapped.
    */
+  /**
+   * Hides the keyboard and returns whether it is still shown. iOS has no general way: a done/go
+   * key of the keyboard is tapped, else Return is pressed, but only in a single-line field (in a
+   * multi-line one it would add a line break to the user's text; such a keyboard stays and the
+   * caller says so). The driver's own hideKeyboard is skipped on iOS: on an iPhone it only fails
+   * ("Did not know how to dismiss the keyboard") after several seconds.
+   */
   async hideKeyboard(): Promise<boolean> {
-    try {
+    if (this.platform !== "ios") {
       await this.driver.hideKeyboard();
-    } catch (error) {
-      if (this.platform !== "ios") throw error;
+      await sleep(250);
+      return this.keyboardShown();
     }
-    if (this.platform === "ios") {
-      const attempts = [
-        () =>
-          this.driver.execute("mobile: hideKeyboard", {
-            keys: ["done", "Done", "return", "Return", "go", "Go", "search", "Search"],
-          }),
-        () => this.driver.keys(["\n"]),
-      ];
-      for (const attempt of attempts) {
-        await sleep(250);
-        if (!(await this.keyboardShown())) return false;
-        await attempt().catch(() => undefined);
-      }
-    }
+    if (!(await this.keyboardShown())) return false;
+    await this.driver
+      .execute("mobile: hideKeyboard", {
+        keys: ["done", "Done", "return", "Return", "go", "Go", "search", "Search"],
+      })
+      .catch(() => undefined);
     await sleep(250);
+    if (!(await this.keyboardShown())) return false;
+    const id = await this.activeElementId();
+    const type = id ? await this.driver.getElementAttribute(id, "type").catch(() => null) : null;
+    if (type === "XCUIElementTypeTextField" || type === "XCUIElementTypeSecureTextField") {
+      await this.driver.keys(["\n"]).catch(() => undefined);
+      await sleep(250);
+    }
     return this.keyboardShown();
   }
 

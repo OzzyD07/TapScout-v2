@@ -279,7 +279,8 @@ değiştirir.
   hazırdı. Ekran, yazma, kare yakalama, canlı tampon, loglar, kanıt ve bulgu çalıştı. Planlanmış
   "klavye Continue'yu kapatıyor" hatası görüldü. Appium bir kez "socket hang up" ile düştü;
   runner uygulama verisini koruyarak oturumu yeniden açtı. `session_stop` sonrası loglar geldi ve
-  job **success** ile bitti. Public job logunda yazılan metin, token veya tünel adresi yok.
+  job **success** ile bitti. Public job logunda yazılan metin veya token yok. (Tünel adresi o
+  sırada adım başlıklarında görünüyordu; artık maskeleniyor, aşağıya bakın.)
 - **GitHub Actions iOS (iPhone 17, iOS 26.5 Simulator, macos-26):** Runner bağlandı ve 11 MB'lık
   build'i indirdi. XCUITest/WDA ile oturum açılışı yaklaşık 9 dk sürdü. Ekran, UI ağacı (klavye
   altında kalan Continue `UNDER-KEYBOARD` olarak işaretlendi), Türkçe ve emoji yazma (yapıştırma
@@ -321,6 +322,10 @@ değiştirir.
   - *Zaman aşımı:* Kısaltılmış sürelerle (`TAPSCOUT_TIMEOUT_FACTOR`) zaman aşımı, ardından
     `device_busy` ve "geç bitti" notu görüldü. Takılan komut Appium oturumunun değiştirilmesine
     yol açtı; uygulama yazılmış metniyle aynı ekranda kaldı.
+  - *Herkese açık log:* Hub'ın tünel adresi workflow `env` değeri olarak her adım başlığında
+    görünüyordu. Artık maskeleniyor: yeni bir GitHub Android run'ında logda adres yok
+    (`HUB_URL: ***`), yazılan metin ve token da yok; job **success** ile bitti. Aynı test bu
+    oturumda (Android 15, telefon profili) Appium oturumu bir kez yenilenmesine rağmen geçti.
   - *Doğrulamada bulunup düzeltilenler:* aynı sürüm numaralı build'in kurulmaması
     (`enforceAppInstall`); iOS'ta alan temizlendikten sonra ⌘V'nin hata vermeden hiçbir şey
     yapıştırmaması (artık alanın değeri kontrol ediliyor, gerekirse tekrar deneniyor); kontrast
