@@ -178,7 +178,8 @@ Bu araçlar ölçer, gözlemler ve kanıt toplar. Neyin hata olduğuna yine ajan
 - **Dış erişim:** Tünel yalnızca ağ geçidi portunu (`/healthz`, `/runner/*`) açar. Web arayüzü,
   API ve MCP `127.0.0.1` üzerindedir ve Host/Origin denetimiyle DNS rebinding'e karşı korunur.
 - **Herkese açık repo:** Workflow logları herkese açıktır. Runner ekran içeriği, yazılan metin veya
-  token yazmaz. Build ve kanıtlar GitHub'a yüklenmez; artifact yükleme isteğe bağlıdır
+  token yazmaz. Hub'ın tünel adresi her job'ın ilk adımında maskelenir; loglarda `***` olarak
+  görünür. Build ve kanıtlar GitHub'a yüklenmez; artifact yükleme isteğe bağlıdır
   (`upload_artifacts`).
 
 ## Bağlantı ve temizlik

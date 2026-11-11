@@ -54,9 +54,10 @@ concurrency:
   group: device-session-${{ inputs.session_id }}
   cancel-in-progress: false
 
+# HUB_URL is not set here: workflow and job env values are printed in every step's header. Each
+# job's first step reads it from the event file and masks it (see "Hide the hub address").
 env:
   SESSION_ID: ${{ inputs.session_id }}
-  HUB_URL: ${{ inputs.hub_url }}
   MAX_MINUTES: ${{ inputs.max_minutes }}
   TAPSCOUT_OIDC_AUDIENCE: tapscout-v2
   OUT: .artifacts/session
@@ -71,6 +72,13 @@ jobs:
     outputs:
       job_timeout: ${{ steps.check.outputs.job_timeout }}
     steps:
+      - name: Hide the hub address
+        # The script text holds no address (it is echoed in the log); the value comes from the
+        # event file, is masked first and then shared with the job's later steps as ***.
+        run: |
+          hub=$(jq -r '.inputs.hub_url // ""' "$GITHUB_EVENT_PATH")
+          if [ -n "$hub" ]; then echo "::add-mask::$hub"; fi
+          echo "HUB_URL=$hub" >> "$GITHUB_ENV"
       - name: Validate inputs
         id: check
         run: |
@@ -93,6 +101,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: ${{ fromJSON(needs.validate.outputs.job_timeout) }}
     steps:
+      - name: Hide the hub address
+        run: |
+          hub=$(jq -r '.inputs.hub_url // ""' "$GITHUB_EVENT_PATH")
+          if [ -n "$hub" ]; then echo "::add-mask::$hub"; fi
+          echo "HUB_URL=$hub" >> "$GITHUB_ENV"
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
@@ -144,6 +157,11 @@ jobs:
     runs-on: macos-26
     timeout-minutes: ${{ fromJSON(needs.validate.outputs.job_timeout) }}
     steps:
+      - name: Hide the hub address
+        run: |
+          hub=$(jq -r '.inputs.hub_url // ""' "$GITHUB_EVENT_PATH")
+          if [ -n "$hub" ]; then echo "::add-mask::$hub"; fi
+          echo "HUB_URL=$hub" >> "$GITHUB_ENV"
       - uses: actions/checkout@v7
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_26.6.app && xcodebuild -version
