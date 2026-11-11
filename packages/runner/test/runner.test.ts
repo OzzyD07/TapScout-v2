@@ -142,3 +142,31 @@ describe("environment helpers", () => {
     expect(iosLocaleArguments("")).toEqual([]);
   });
 });
+
+describe("android crash buffer", () => {
+  it("keeps the app's crashes and drops other processes'", async () => {
+    const { appCrashLines } = await import("../src/session.js");
+    const lines = [
+      // A Google system app crashing natively on the emulator (seen during a recording).
+      "1794403600.120  6815  6933 F libc    : Fatal signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x8 in tid 6933 (vkp-mediapipe-0), pid 6815 (ogle.android.as)",
+      // The app under test crashing in Java.
+      "1794403601.500  7992  7992 E AndroidRuntime: FATAL EXCEPTION: main",
+      "1794403601.500  7992  7992 E AndroidRuntime: Process: dev.tapscout.fieldnotes, PID: 7992",
+      "1794403601.501  7992  7992 E AndroidRuntime: java.lang.IllegalStateException: boom",
+      // A native crash of the app, logged by crash_dump with the package name.
+      "1794403602.000  8100  8100 F DEBUG   : pid: 8050, tid: 8050, name: dev.tapscout.fieldnotes  >>> dev.tapscout.fieldnotes <<<",
+    ];
+    const kept = appCrashLines(lines, "dev.tapscout.fieldnotes", new Set());
+    expect(kept).toHaveLength(4);
+    expect(kept.some((l) => l.includes("ogle.android.as"))).toBe(false);
+    expect(appCrashLines(lines.slice(0, 1), "dev.tapscout.fieldnotes", new Set())).toEqual([]);
+    // A tracked pid counts even when its lines do not name the package.
+    expect(
+      appCrashLines(
+        ["1794403603.000  4242  4242 F libc    : Fatal signal 6"],
+        "x.y",
+        new Set([4242]),
+      ),
+    ).toHaveLength(1);
+  });
+});

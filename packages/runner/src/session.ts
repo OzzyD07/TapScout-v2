@@ -89,6 +89,29 @@ function withDeadline<T>(task: Promise<T>, name: string, timeoutMs: number): Pro
   return Promise.race([task, deadline]).finally(() => clearTimeout(timer));
 }
 
+/**
+ * Crash-buffer lines of the app under test only. The buffer holds every process's crashes
+ * (a Google system app crashing on the emulator failed an app's "no_crash" check); lines are
+ * grouped by the logging process and kept when the group names the app's package or comes from
+ * one of its processes (native crashes are logged by crash_dump with the package in the text).
+ */
+export function appCrashLines(
+  lines: string[],
+  appId: string,
+  appPids: ReadonlySet<number>,
+): string[] {
+  const groups = new Map<string, string[]>();
+  for (const line of lines) {
+    const pid = /^\s*[\d.]+\s+(\d+)\s+\d+\s/.exec(line)?.[1] ?? "?";
+    groups.set(pid, [...(groups.get(pid) ?? []), line]);
+  }
+  const keep = new Set<string>();
+  for (const [pid, group] of groups) {
+    if (appPids.has(Number(pid)) || group.some((l) => l.includes(appId))) keep.add(pid);
+  }
+  return lines.filter((l) => keep.has(/^\s*[\d.]+\s+(\d+)\s+\d+\s/.exec(l)?.[1] ?? "?"));
+}
+
 /** Appium errors after which the driver session is gone. */
 export function isSessionDead(error: unknown): boolean {
   return /invalid session id|session is either terminated|not started|ECONNREFUSED|socket hang up|instrumentation process is not running|device offline|device .* not found/i.test(
@@ -102,6 +125,8 @@ export class DeviceSession {
   readonly stream: LiveStream;
   readonly startedAt = Date.now();
   private readonly commands: CommandQueue;
+  /** Bumped whenever the device session is replaced; work of an older one never recovers it. */
+  private deviceGen = 0;
   private recorder: AndroidScreenRecord | SimctlRecord | null = null;
   private recordingFile: string | null = null;
   private recordingName: string | null = null;
@@ -214,14 +239,11 @@ export class DeviceSession {
       "warn",
       `${command.name} is still running after ${secs} s (timed out); replacing the Appium session — the app keeps its data and state.`,
     );
-    const old = this.device;
+    this.deviceGen += 1;
     this.commands
       .replace(async () => {
-        await old.forceClose();
-        if (this.info.platform === "android") await recoverEmulator();
-        const fresh = await this.deps.reopen();
-        fresh.copyLaunchArgumentsFrom(old);
-        this.device = fresh;
+        await this.device.forceClose();
+        await this.replaceDevice();
         this.deps.event("info", "Device session replaced; take a fresh screenshot before acting.");
       })
       .catch((error) =>
@@ -234,22 +256,54 @@ export class DeviceSession {
 
   /** A dead Appium session is replaced once (app data kept) and the command retried. */
   private async withRecovery(name: CommandName, fn: () => Promise<CommandOutput>) {
+    const gen = this.deviceGen;
     try {
       return await fn();
     } catch (error) {
-      if (!isSessionDead(error)) throw error;
+      // An abandoned command whose session was deliberately replaced must not start a second,
+      // competing replacement (they ended each other's sessions on a stuck long press).
+      if (!isSessionDead(error) || gen !== this.deviceGen) throw error;
+      this.deviceGen += 1;
       this.deps.event(
         "warn",
         `Device session broke during ${name} (${(error as Error).message.slice(0, 160)}); reconnecting.`,
       );
-      await this.device.close().catch(() => undefined);
-      if (this.info.platform === "android") await recoverEmulator();
-      const old = this.device;
-      this.device = await this.deps.reopen();
-      this.device.copyLaunchArgumentsFrom(old);
+      await this.device.forceClose(10_000);
+      await this.replaceDevice();
       this.deps.event("info", "Device session restored; the app was kept with its data.");
       return fn();
     }
+  }
+
+  /**
+   * Opens a new Appium session for the same device, the app kept as it is. On Android the old
+   * UiAutomator2 server is stopped first: a new session started while it is still shutting
+   * down fails with "The instrumentation process cannot be initialized" (seen on a stuck
+   * long press). Three attempts, a little longer apart each time.
+   */
+  private async replaceDevice(): Promise<void> {
+    const old = this.device;
+    if (this.info.platform === "android") {
+      for (const pkg of ["io.appium.uiautomator2.server.test", "io.appium.uiautomator2.server"]) {
+        await adb(["shell", "am", "force-stop", pkg], 15_000).catch(() => undefined);
+      }
+      await recoverEmulator();
+    }
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const fresh = await this.deps.reopen();
+        fresh.copyLaunchArgumentsFrom(old);
+        this.device = fresh;
+        return;
+      } catch (error) {
+        lastError = error;
+        const first = (error as Error).message.split("\n")[0];
+        this.deps.log(`new device session attempt ${attempt} failed: ${first}`);
+        await sleep(2_000 * attempt);
+      }
+    }
+    throw lastError;
   }
 
   private async dispatch(name: CommandName, rawArgs: unknown): Promise<CommandOutput> {
@@ -399,14 +453,16 @@ export class DeviceSession {
     const since = a.sinceMs ?? this.startedAt;
     const reports: CrashReport[] = [];
     if (this.info.platform === "android") {
+      this.deps.logs?.trackPid(await pidOf(this.info.appId));
       const raw = await adb(
         ["logcat", "-b", "crash", "-d", "-v", "threadtime", "-v", "epoch"],
         15_000,
       ).catch(() => "");
-      const lines = raw.split(/\r?\n/).filter((l) => {
+      const recent = raw.split(/\r?\n/).filter((l) => {
         const m = /^\s*(\d+)\.(\d+)/.exec(l);
         return m ? Number(m[1]) * 1000 >= since - 1000 : false;
       });
+      const lines = appCrashLines(recent, this.info.appId, this.deps.logs?.pids ?? new Set());
       if (lines.length > 0) {
         const text = lines.join("\n");
         const head =

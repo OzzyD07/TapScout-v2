@@ -196,7 +196,14 @@ export class DeviceController {
   // ---- Gestures ---------------------------------------------------------------------------
 
   private async perform(pointers: Pointer[]): Promise<void> {
-    await this.driver.performActions(pointers);
+    try {
+      await this.driver.performActions(pointers);
+    } catch (error) {
+      // UiAutomator2 sometimes refuses the very first action chain of a new session; once.
+      if (!/Unable to perform W3C actions/i.test((error as Error).message)) throw error;
+      await sleep(600);
+      await this.driver.performActions(pointers);
+    }
     await this.driver.releaseActions().catch(() => undefined);
   }
 

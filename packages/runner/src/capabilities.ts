@@ -40,6 +40,10 @@ export function buildCapabilities(options: SessionOptions): Record<string, unkno
       // apps often finish a splash activity at once or redirect (TapScout v1 benchmark runs). The
       // runner starts the app itself without waiting.
       "appium:autoLaunch": false,
+      // Appium force-stops the app when a session is deleted (and when one starts): replacing a
+      // stuck session then lost the screen the agent was on. A fresh session still starts clean,
+      // because noReset=false clears the app's data (which ends its process).
+      "appium:dontStopAppOnReset": true,
       ...common,
     };
   }
