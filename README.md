@@ -327,11 +327,21 @@ değiştirir.
     durulması 1425 ms, ~16 fps; soğuk açılış 5,2 sn. Bir de 8 sn'lik örnekleme yapıldı.
   - *Zaman aşımı:* Kısaltılmış sürelerle (`TAPSCOUT_TIMEOUT_FACTOR`) zaman aşımı, ardından
     `device_busy` ve "geç bitti" notu görüldü. Takılan komut Appium oturumunun değiştirilmesine
-    yol açtı; uygulama yazılmış metniyle aynı ekranda kaldı.
+    yol açtı; uygulama yazılmış metniyle aynı ekranda kaldı. GitHub iOS'ta da kendiliğinden bir
+    takılma yaşandı: UI ağacı okuması 45 sn'yi aştı, sonraki komut `device_busy` aldı, runner
+    Appium oturumunu değiştirdi ve uygulama "Edit profile" ekranında verisiyle kaldı. Bir iOS
+    klavye komutunun zaman aşımından 1 sn sonra bittiği de ajana bildirildi.
   - *Herkese açık log:* Hub'ın tünel adresi workflow `env` değeri olarak her adım başlığında
-    görünüyordu. Artık maskeleniyor: yeni bir GitHub Android run'ında logda adres yok
-    (`HUB_URL: ***`), yazılan metin ve token da yok; job **success** ile bitti. Aynı test bu
-    oturumda (Android 15, telefon profili) Appium oturumu bir kez yenilenmesine rağmen geçti.
+    görünüyordu. Artık maskeleniyor: yeni GitHub Android ve iOS run'larının loglarında adres yok
+    (`HUB_URL: ***`), yazılan metin ve token da yok; job'lar **success** ile bitti. Aynı test
+    GitHub Android oturumunda (Android 15, telefon profili) Appium oturumu bir kez yenilenmesine
+    rağmen geçti.
+  - *iOS yazma ve klavye:* Bir ekran geçişinin hemen ardından yazılan "Ayse"den yalnızca "A"
+    geliyordu; runner eksik "yse"yi tamamladı. Alan temizlendikten sonra hiçbir şey yapıştırmayan
+    ⌘V artık hata vermeden başarı bildirmiyor. Klavyeyi kapatırken basılan Return tuşu çok
+    satırlı alana satır sonu ekliyordu (kaydedilen değer `Saha notları uzmanı\n` oldu); artık
+    basılmıyor ve kaydedilen değer tam olarak yazılan metin. Bu düzeltmelerden sonra iOS'ta test
+    tekrarı 170 sn yerine 73–108 sn sürdü.
   - *Doğrulamada bulunup düzeltilenler:* aynı sürüm numaralı build'in kurulmaması
     (`enforceAppInstall`); iOS'ta alan temizlendikten sonra ⌘V'nin hata vermeden hiçbir şey
     yapıştırmaması (artık alanın değeri kontrol ediliyor, gerekirse tekrar deneniyor); kontrast
