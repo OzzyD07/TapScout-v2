@@ -83,12 +83,67 @@ node packages/hub/dist/call.js device_screenshot '{"annotate":"elements"}' --out
 | Uygulama | `app_restart` (veri silmeyle ya da silmeden), `app_control` (launch, terminate, background, state, open_url, clear_data), `device_rotate`, `device_wait` (idle, text, text_gone) |
 | Ortam | `device_environment`: koyu/açık mod, uygulama dili, yazı boyutu, GPS konumu, internetsiz mod, push bildirimi, Face ID / parmak izi, galeriye fotoğraf veya video |
 | Zaman | `device_capture_frames` (bir eylem etrafında zaman damgalı kareler; kontak sayfası), `device_recent_frames` (canlı tampon), `device_recording` (MP4) |
+| Görsel kalite | `device_visual_audit`: kontrast, küçük dokunma alanı, etiketsiz kontrol, çakışma, ekran dışına taşma, kesilmiş metin, hizasızlık, durum çubuğu / home indicator altında kalan kontrol |
+| Performans | `device_performance`: `snapshot` (CPU ve bellek), `sample` (zaman içinde CPU ve bellek), `launch` (soğuk veya sıcak açılış), `action` (bir eylemin görsel tepkisi, fps, takılma; Android'de gfxinfo jank) |
+| Testler | `test_record`, `test_expect`, `test_save` (ajanın yaptığı adımları test olarak kaydeder), `test_list`, `test_get`, `test_delete`, `test_run` (bir veya birden çok oturumda, paralel), `test_results`, `test_compare` (build'ler arası tablo) |
 | Kanıt | `device_logs`, `device_crashes`, `evidence_capture`, `finding_record` |
 
 **Koordinatlar:** bütün x, y ve bölge değerleri *görünüm birimidir*. Görünüm birimi,
 `device_screenshot` görüntüsünün pikselidir (örneğin 576×1280). Hub bunu Android'de px'e, iOS'ta
 pt'ye çevirir. Element hedefleri de kullanılabilir: `e12`, `id:login_button`, `text:Kaydet`.
 Bir eylemden sonra ref'ler eski kalırsa hub elementi yeni ağaçta kimliğine göre yeniden bulur.
+
+## Görsel kalite, performans ve regresyon testleri
+
+Bu araçlar ölçer, gözlemler ve kanıt toplar. Neyin hata olduğuna yine ajan karar verir.
+
+- **Görsel denetim (`device_visual_audit`):** UI ağacındaki kutular ve ekran görüntüsünün
+  pikselleri üzerinde çalışır. Kontrast, metnin kendi kutusundaki ön plan ve arka plan
+  renklerinden WCAG oranıyla ölçülür (normal metin 4,5:1, büyük metin 3:1). Dokunma alanı sınırı
+  Android'de 48 dp, iOS'ta 44 pt'dir. Sonuç, numaralı adaylar ve aynı numaralarla işaretlenmiş
+  ekran görüntüsüdür; her aday için önem ve güven derecesi verilir. Adaylar ipucudur: ajan onları
+  görüntüde veya `device_zoom` ile doğrular, sonra `finding_record` ile kaydeder. Koyu mod, büyük
+  yazı, başka dil (`device_environment`) ve yatay ekran (`device_rotate`) sonrasında tekrar
+  çalıştırılır. Denetimler `evidence/audits/` altına JSON ve işaretli görüntü olarak kaydedilir ve
+  raporda görünür.
+- **Performans (`device_performance`):**
+
+  | Ölçüm | Android | iOS Simulator |
+  |---|---|---|
+  | CPU | `/proc/<pid>/stat` (tek çekirdeğe göre %, 100'ü aşabilir) | uygulama sürecinin macOS'taki `ps` CPU süresinden (aynı birim) |
+  | Bellek | `dumpsys meminfo` (PSS, RSS, Java/Native heap, grafik), iş parçacığı sayısı | `ps` RSS, iş parçacığı sayısı |
+  | Açılış | `am start -W` TotalTime + ekranın durulduğu an | XCTest'in uygulamayı açma süresi + ekranın durulduğu an |
+  | Eylem tepkisi | Ekran videosundan: ilk değişiklik, durulma, hareket sırasındaki fps, en uzun duraklama | aynısı (`simctl` videosu) |
+  | Kare zamanlaması | `dumpsys gfxinfo` (jank yüzdesi, 50/90/95/99. yüzdelik kare süresi) | yok |
+  | Donma ve ANR | `device_crashes` (ANR kayıtları), eylem ölçümündeki uzun duraklamalar | `device_crashes`, uzun duraklamalar |
+
+  Emülatör ve simülatör, ana makinenin CPU'sunu ve GPU'sunu paylaşır. Değerler gerçek cihazla
+  aynı değildir; aynı kurulumdaki build'leri ve ekranları karşılaştırmak için kullanılır. iOS'ta
+  Instruments veya XCTMetric yoktur: bunlar uygulamanın içine derlenen bir test paketi ya da
+  `xctrace` kaydı ister. Ölçümler `evidence/perf/` altına kaydedilir ve raporda görünür.
+- **Tekrarlanabilir testler:** Ajan uygulamayı normal araçlarla kullanırken `test_record` kaydı
+  başlatır. Her eylem bir adım olur ve hedef, cihazdan bağımsız biçimde saklanır: önce `id`, sonra
+  metin, rol ve sıra; element yoksa ekran oranı. `test_expect` beklenen sonucu ekler: element
+  görünür veya görünmez, metin eşittir veya içerir, uygulama çalışıyor, çökme yok, ekran kayıtlı
+  görüntüye benziyor. `test_save` testi `.data/tests/<id>/test.json` dosyasına yazar. Ajan testi
+  daha sonra `test_get` ile okuyup değiştirip `test_save` ile yeni sürüm olarak kaydedebilir.
+- **Tekrar çalıştırma ve regresyon:** `test_run`, testleri bir veya birden çok hazır oturumda
+  (örneğin aynı build'in Android ve iOS oturumlarında) paralel ve arka planda çalıştırır. Adımları
+  ve beklentileri TapScout uygular ve kontrol eder; bu sırada ajan karar vermez. Başarısız adımda
+  ekran görüntüsü, UI ağacı ve log kanıt olarak saklanır. Her sonuç, aynı platformdaki farklı bir
+  build'in son sonucuyla karşılaştırılır:
+
+  | Önce | Şimdi | Sınıf |
+  |---|---|---|
+  | geçti | geçmedi | **REGRESSION** |
+  | geçmedi | geçti | fixed |
+  | geçmedi | geçmedi | still_failing |
+  | geçti | geçti | stable |
+  | sonuç yok | | new |
+
+  Build, dosyanın SHA-256 değeri ile ayırt edilir; sürüm ve build numarası etiket olarak
+  gösterilir. `test_compare` build'leri sütun, testleri satır olarak gösterir. Web arayüzündeki
+  "Testler ve regresyon" paneli de aynı bilgiyi gösterir.
 
 ## İstemciye bağlı kısıtlar
 
@@ -138,8 +193,34 @@ Bir eylemden sonra ref'ler eski kalırsa hub elementi yeni ağaçta kimliğine g
 - Appium oturumu çökerse runner, uygulama verisini koruyarak yeni bir oturum açar ve komutu yeniden
   dener.
 
+### Komut zaman aşımları
+
+Appium komutları iptal edilemez: süresi dolan bir HTTP isteği cihazda çalışmaya devam edebilir.
+Runner bu yüzden komutları tek bir kuyrukta sırayla çalıştırır ve her komutun gerçek durumunu
+izler:
+
+- Süresi dolan komut henüz başlamamışsa iptal edilir ve hiç çalışmaz. Başlamışsa hata "hâlâ
+  çalışıyor olabilir" der.
+- Komut sürerken gelen yeni Appium komutları `device_busy` hatası alır; önceki komut sonradan
+  biten işin üzerine yazmaz. Ekran görüntüsü, log, çökme ve performans okumaları Appium'u
+  beklemez (adb veya `simctl`).
+- Komut daha sonra biterse ajana bir sonraki araç sonucunda "geç bitti" notu gider. Ekran
+  değişmiş olabileceği için ajan tekrar bakar.
+- 30 sn içinde bitmeyen komut takılmış sayılır. Runner Appium oturumunu siler, Android'de
+  UiAutomator2 sunucusunu durdurur ve uygulamaya ve verisine dokunmadan yeni bir oturum açar (en
+  fazla 3 deneme). Uygulama aynı ekranda kalır. Terk edilen komutun kurtarma denemesi yeni oturumu
+  bozmaz.
+
+Tanı için: `TAPSCOUT_TIMEOUT_FACTOR` (hub) komut sürelerini çarpar (örneğin 0.1 ile zaman
+aşımları kolayca denenir); `TAPSCOUT_STUCK_AFTER_MS` yerel runner'ın "takıldı" eşiğini
+değiştirir.
+
 ## Platform notları
 
+- **Build kurulumu:** Verilen build her oturumda kurulur; cihazda aynı veya daha yeni sürüm
+  numaralı bir uygulama olsa da (`enforceAppInstall`). Appium normalde aynı sürümü atlar. Yeniden
+  kullanılan bir emülatörde bu, yeni build yerine eskisinin test edilmesine yol açıyordu.
+  Takılan bir oturumun yerine açılan oturum ise uygulamayı yeniden kurmaz ve durdurmaz.
 - **Cihaz ortamı (`device_environment`):** Her ayar ayrı uygulanır ve sonucu ayrı bildirilir.
 
   | Ayar | Android | iOS Simulator |

@@ -308,25 +308,56 @@ export class DeviceController {
     return { focused: true, ...(typeof value === "string" ? { value } : {}) };
   }
 
-  /** iOS Simulator: put the text on the pasteboard and paste it with ⌘V (edit menu as fallback). */
+  /**
+   * iOS Simulator: put the text on the pasteboard and paste it with ⌘V, edit menu as fallback.
+   * ⌘V can do nothing without an error (seen right after clearing a field on a GitHub runner), so
+   * every attempt is checked on the field's value; a later attempt only runs when the field is
+   * still unchanged, so the text is never pasted twice.
+   */
   private async pasteIos(elementId: string, text: string) {
+    const before = await this.fieldValue(elementId);
     await this.driver.execute("mobile: setPasteboard", { content: text, encoding: "utf8" });
-    try {
-      await this.driver.execute("mobile: keys", {
-        elementId,
-        keys: [{ key: "v", modifierFlags: 1 << 4 }],
-      });
-      return;
-    } catch {
-      // No hardware-keyboard events: use the edit menu.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const sent = await this.driver
+        .execute("mobile: keys", { elementId, keys: [{ key: "v", modifierFlags: 1 << 4 }] })
+        .then(
+          () => true,
+          () => false, // no hardware-keyboard events: use the edit menu
+        );
+      if (!sent) break;
+      if (await this.valueChanged(elementId, before)) return;
     }
     await this.driver.execute("mobile: touchAndHold", { elementId, duration: 1.0 });
     await sleep(600);
     const paste = await this.driver.$('-ios predicate string:label == "Paste"');
-    if (!(await paste.isExisting())) {
-      throw new DeviceError("type_failed", "could not paste: the edit menu has no Paste item");
+    if (await paste.isExisting()) {
+      await paste.click();
+      if (await this.valueChanged(elementId, before)) return;
     }
-    await paste.click();
+    throw new DeviceError(
+      "type_failed",
+      "The text did not arrive: pasting it (needed for characters the iOS keyboard lacks) left the field unchanged. Check the field and try again.",
+    );
+  }
+
+  /** The field's value; through the focused element when the reference went stale. */
+  private async fieldValue(elementId: string): Promise<string | null> {
+    const read = (id: string) => this.driver.getElementAttribute(id, "value").catch(() => null);
+    let v = await read(elementId);
+    if (v === null) {
+      const active = await this.activeElementId();
+      if (active && active !== elementId) v = await read(active);
+    }
+    return typeof v === "string" ? v : null;
+  }
+
+  /** Waits briefly for the field's value to differ from `before` (a paste lands asynchronously). */
+  private async valueChanged(elementId: string, before: string | null): Promise<boolean> {
+    for (let i = 0; i < 4; i++) {
+      if ((await this.fieldValue(elementId)) !== before) return true;
+      await sleep(300);
+    }
+    return false;
   }
 
   async key({ key, times = 1 }: CommandArgs<"key">): Promise<void> {

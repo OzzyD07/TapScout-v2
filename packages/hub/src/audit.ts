@@ -72,9 +72,19 @@ export function contrastRatio(l1: number, l2: number): number {
   return (hi + 0.05) / (lo + 0.05);
 }
 
+/** Pixels closer to the background than this ratio are background (JPEG noise, gradients). */
+const SAME_AS_BACKGROUND = 1.1;
+
 /**
- * Text vs background contrast inside a box: the most common colour is the background; the text
- * colour is the cluster (≥3 % of pixels) that contrasts most with it. Null when unclear.
+ * Text vs background contrast inside a box. The background is the median luminance (text covers
+ * a minority of its box) and must fill at least half of the box. The text is the larger group of
+ * pixels clearly lighter or clearly darker than it; its colour is read near the group's extreme,
+ * because anti-aliased stroke edges blend into the background. Null when there is no plain
+ * background or no distinct text pixels (an image behind the text, an empty box).
+ *
+ * Colour clusters were used before: a dark background on a quantisation boundary split into two
+ * large clusters, thin text spread over many small ones, and the "text" became the other half of
+ * the background (1.0:1 for clearly readable grey text in dark mode).
  */
 export async function boxContrast(full: Buffer, r: Rect, size: { width: number; height: number }) {
   const inset = { x: Math.round(r.width * 0.04), y: Math.round(r.height * 0.1) };
@@ -83,39 +93,32 @@ export async function boxContrast(full: Buffer, r: Rect, size: { width: number; 
   const width = Math.min(size.width - left, r.width - 2 * inset.x);
   const height = Math.min(size.height - top, r.height - 2 * inset.y);
   if (width < 6 || height < 6) return null;
-  const scale = Math.min(1, 96 / width);
-  const { data, info } = await sharp(full)
+  const scale = Math.min(1, 320 / width);
+  const { data } = await sharp(full)
     .extract({ left, top, width, height })
     .resize({ width: Math.max(4, Math.round(width * scale)), kernel: "nearest" })
     .removeAlpha()
     .raw()
     .toBuffer({ resolveWithObject: true });
-  const buckets = new Map<number, { n: number; r: number; g: number; b: number }>();
-  const pixels = info.width * info.height;
-  for (let i = 0; i < data.length; i += 3) {
-    const r0 = data[i] ?? 0;
-    const g0 = data[i + 1] ?? 0;
-    const b0 = data[i + 2] ?? 0;
-    const key = ((r0 >> 4) << 8) | ((g0 >> 4) << 4) | (b0 >> 4);
-    const bucket = buckets.get(key) ?? { n: 0, r: 0, g: 0, b: 0 };
-    bucket.n += 1;
-    bucket.r += r0;
-    bucket.g += g0;
-    bucket.b += b0;
-    buckets.set(key, bucket);
+  const lums: number[] = [];
+  for (let i = 0; i + 2 < data.length; i += 3) {
+    lums.push(luminance(data[i] ?? 0, data[i + 1] ?? 0, data[i + 2] ?? 0));
   }
-  const clusters = [...buckets.values()]
-    .map((c) => ({ share: c.n / pixels, lum: luminance(c.r / c.n, c.g / c.n, c.b / c.n) }))
-    .sort((a, b) => b.share - a.share);
-  const bg = clusters[0];
-  if (!bg || bg.share < 0.3) return null;
-  let best: number | null = null;
-  for (const c of clusters.slice(1)) {
-    if (c.share < 0.03) continue;
-    const ratio = contrastRatio(bg.lum, c.lum);
-    if (best === null || ratio > best) best = ratio;
+  if (lums.length < 16) return null;
+  const bg = [...lums].sort((a, b) => a - b)[Math.floor(lums.length / 2)] ?? 0;
+  const lighter: number[] = [];
+  const darker: number[] = [];
+  let plain = 0;
+  for (const l of lums) {
+    const ratio = contrastRatio(l, bg);
+    if (ratio < SAME_AS_BACKGROUND) plain++;
+    else (l > bg ? lighter : darker).push(ratio);
   }
-  return best;
+  if (plain / lums.length < 0.5) return null;
+  const text = lighter.length >= darker.length ? lighter : darker;
+  if (text.length / lums.length < 0.02) return null;
+  text.sort((a, b) => a - b);
+  return text[Math.floor((text.length - 1) * 0.8)] ?? null;
 }
 
 export interface AuditInput {

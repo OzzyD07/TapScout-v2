@@ -9,8 +9,16 @@ import { execText, sleep } from "./exec.js";
 
 export async function simulatorName(udid: string | undefined): Promise<string | undefined> {
   if (!udid) return undefined;
+  // One device's environment answers quickly; listing every device took over 30 s on a busy
+  // runner (the session then reported an "unknown" device).
+  const own = await execText("xcrun", ["simctl", "getenv", udid, "SIMULATOR_DEVICE_NAME"], {
+    timeoutMs: 15_000,
+  }).catch(() => "");
+  if (own.trim()) return own.trim();
   try {
-    const list = JSON.parse(await execText("xcrun", ["simctl", "list", "-j", "devices"])) as {
+    const list = JSON.parse(
+      await execText("xcrun", ["simctl", "list", "-j", "devices"], { timeoutMs: 45_000 }),
+    ) as {
       devices: Record<string, { udid: string; name: string }[]>;
     };
     return Object.values(list.devices)

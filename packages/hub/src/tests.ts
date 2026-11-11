@@ -719,8 +719,9 @@ export class TestExecutor {
         let last = "";
         for (;;) {
           const el = findTarget(await this.tree(), step.target);
+          // iOS often reports the same string as label and value.
           const have = el
-            ? [el.text, el.label].filter(Boolean).map((v) => (v as string).trim())
+            ? [...new Set([el.text, el.label].filter(Boolean).map((v) => (v as string).trim()))]
             : [];
           last = have.join(" | ");
           const want = step.value.trim();
