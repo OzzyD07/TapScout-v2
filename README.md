@@ -248,10 +248,16 @@ değiştirir.
   yaklaşık ±0,5 sn sapabilir; araç eylemin ne zaman bittiğini de bildirir. Video yoksa iOS'ta WDA
   MJPEG akışı, Android'de ekran görüntüsü yoklaması kullanılır.
 - **iOS'ta yazma:** XCTest klavyede olmayan karakterlerde ("ş", emoji) takılır. Bu yüzden ASCII
-  dışı metin panoya konup ⌘V ile yapıştırılır.
-- **iOS'ta klavyeyi kapatma:** Genel bir yöntem yok. Sürücü, klavyenin done/return tuşları ve
-  Return denenir. Hiçbiri olmazsa araç klavyenin hâlâ açık olduğunu söyler; uygulamada başka
-  hiçbir yere dokunulmaz.
+  dışı metin panoya konup ⌘V ile yapıştırılır. Her yazmadan sonra alanın değeri okunur. Klavye
+  açılırken kaybolan harfler bir kez daha yazılır. Hiçbir şey yapıştırmayan ⌘V tekrarlanır, sonra
+  düzenleme menüsü denenir. Metin yine gelmezse araç hata döner. Alan beklenmeyen bir değer
+  gösteriyorsa (maske, şifre alanı, uzunluk sınırı) metin ikinci kez yazılmaz.
+- **iOS'ta klavyeyi kapatma:** Genel bir yöntem yok. Tek satırlı alanda klavyenin done, go veya
+  return tuşuna, o da olmazsa Return'e basılır. Çok satırlı alanda hiçbir tuşa basılmaz: bu
+  tuşların hepsi klavyenin Return tuşudur ve metne satır sonu ekler (doğrulamada kaydedilen bir
+  "hakkında" metninin sonuna böyle `\n` eklenmişti). Klavye açık kalırsa araç bunu nedeniyle
+  söyler; uygulamada başka hiçbir yere dokunulmaz. Tekrarlanan bir testte hedef klavyenin
+  altında kalırsa TapScout klavyeye basmak yerine adımı hata olarak bitirir.
 - **iOS logları:** Uygulamanın kendi kayıtları her düzeyde gelir; Apple çerçevelerinden yalnızca
   error/fault kayıtları alınır. XCTest'in erişilebilirlik sorguları süzülür.
 

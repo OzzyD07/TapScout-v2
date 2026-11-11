@@ -813,7 +813,7 @@ export function createMcpServer(manager: SessionManager, uiUrl: string): McpServ
           a.action === "hide"
             ? out.data.shown
               ? ops.s.record.platform === "ios"
-                ? "The keyboard is still shown: it has no done key and Return is not pressed in a multi-line field (it would add a line break). Tap a neutral area of the app if the keyboard hides what you need."
+                ? "The keyboard is still shown: iOS has no general way to hide it, and in a multi-line field no key is pressed (its return key would add a line break to the text). Tap a neutral area of the app if the keyboard hides what you need."
                 : "The keyboard is still shown."
               : "Keyboard hidden."
             : `Keyboard ${out.data.shown ? "shown" : "hidden"}.`,

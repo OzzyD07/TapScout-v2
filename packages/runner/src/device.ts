@@ -27,6 +27,12 @@ type Pointer = {
 const ELEMENT_KEY = "element-6066-11e4-a52e-4f735466cecf";
 /** Text the US on-screen keyboard can type directly (printable ASCII, newline, tab). */
 const PLAIN_TYPABLE = /^[\x20-\x7e\n\t]*$/;
+/** iOS fields whose return key does not insert a line break. */
+const SINGLE_LINE_FIELDS = new Set([
+  "XCUIElementTypeTextField",
+  "XCUIElementTypeSecureTextField",
+  "XCUIElementTypeSearchField",
+]);
 
 import { DeviceError } from "./errors.js";
 
@@ -446,11 +452,11 @@ export class DeviceController {
    * fields resign focus on submit). Nothing outside the keyboard is tapped.
    */
   /**
-   * Hides the keyboard and returns whether it is still shown. iOS has no general way: a done/go
-   * key of the keyboard is tapped, else Return is pressed, but only in a single-line field (in a
-   * multi-line one it would add a line break to the user's text; such a keyboard stays and the
-   * caller says so). The driver's own hideKeyboard is skipped on iOS: on an iPhone it only fails
-   * ("Did not know how to dismiss the keyboard") after several seconds.
+   * Hides the keyboard and returns whether it is still shown. iOS has no general way: in a
+   * single-line field the keyboard's done/go/return key is tapped, else Return is pressed; in a
+   * multi-line field nothing is pressed (the key would add a line break to the user's text) and
+   * the keyboard stays, which the caller reports. The driver's own hideKeyboard is skipped on
+   * iOS: on an iPhone it only fails ("Did not know how to dismiss the keyboard") after seconds.
    */
   async hideKeyboard(): Promise<boolean> {
     if (this.platform !== "ios") {
@@ -459,6 +465,12 @@ export class DeviceController {
       return this.keyboardShown();
     }
     if (!(await this.keyboardShown())) return false;
+    // Every key that can dismiss the keyboard (done, go, search, return) is its return key, and in
+    // a multi-line field that key adds a line break to the user's text (a saved bio ended in
+    // "\n" after a replayed test). Only single-line fields get it.
+    const id = await this.activeElementId();
+    const type = id ? await this.driver.getElementAttribute(id, "type").catch(() => null) : null;
+    if (!SINGLE_LINE_FIELDS.has(String(type))) return true;
     await this.driver
       .execute("mobile: hideKeyboard", {
         keys: ["done", "Done", "return", "Return", "go", "Go", "search", "Search"],
@@ -466,12 +478,8 @@ export class DeviceController {
       .catch(() => undefined);
     await sleep(250);
     if (!(await this.keyboardShown())) return false;
-    const id = await this.activeElementId();
-    const type = id ? await this.driver.getElementAttribute(id, "type").catch(() => null) : null;
-    if (type === "XCUIElementTypeTextField" || type === "XCUIElementTypeSecureTextField") {
-      await this.driver.keys(["\n"]).catch(() => undefined);
-      await sleep(250);
-    }
+    await this.driver.keys(["\n"]).catch(() => undefined);
+    await sleep(250);
     return this.keyboardShown();
   }
 

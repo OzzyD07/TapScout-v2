@@ -523,9 +523,22 @@ export class TestExecutor {
       return { x: t.x * this.view.viewWidth, y: t.y * this.view.viewHeight };
     }
     const deadline = Date.now() + timeoutMs;
+    let hidKeyboard = false;
     for (;;) {
       const tree = await this.tree();
       const el = findTarget(tree, t);
+      if (el?.covered && !hidKeyboard) {
+        // Acting on it would hit a key and type into the focused field.
+        hidKeyboard = true;
+        await this.ops.act("keyboard", { action: "hide" }).catch(() => undefined);
+        continue;
+      }
+      if (el?.covered) {
+        throw new SessionError(
+          "covered",
+          `element ${t.id ? `#${t.id}` : `"${t.text}"`} is under the keyboard, which could not be hidden`,
+        );
+      }
       if (el) {
         const c = center(pxToView(this.view, el.bounds));
         return { ...c, el };
